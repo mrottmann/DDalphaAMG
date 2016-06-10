@@ -1,0 +1,201 @@
+#!/bin/bash
+
+# store input parameters
+
+iparam[0]=$1
+iparam[1]=$2
+iparam[2]=$3
+iparam[3]=$4
+iparam[4]=$5
+iparam[5]=$6
+iparam[6]=$7
+iparam[7]=$8
+iparam[8]=$9
+
+showhelp=0
+
+# check if all input parameters are valid
+
+inputfile="sample.ini"
+
+i=0
+while [ ! $i = $# ]
+do
+  if [ ${iparam[$i]} = "--?" -o ${iparam[$i]} = "-?" -o ${iparam[$i]} = "?" -o ${iparam[$i]} = "--help" -o ${iparam[$i]} = "-help" -o ${iparam[$i]} = "help" ]
+  then
+    showhelp=1
+  fi
+  
+  if [ ${iparam[$i]} = "-i" -o ${iparam[$i]} = "-input" ]
+  then
+    inputfile=${iparam[$((i+1))]}
+  fi
+  if [ ! -e $inputfile ]
+  then
+    echo "inputfile $inputfile does not exist..."
+    exit
+  fi
+
+  i=$((i+1))
+done
+
+# show help
+
+if [ $showhelp = 1 ]
+then
+  echo ""
+  echo "------------------------------------- HELP ------------------------------------"
+  echo "      usage: ./run [option 1] ... [option n]"
+  echo ""
+  echo "-i paramfile, -input paramfile: run the code using a differernt paramter file."
+  echo "                                default: data_in.txt"
+  echo "-s, -shared: runs the program on the machines."
+  echo "             specifed in >>shared.txt<<."
+  echo "-db, -debug: runs the program in debugging mode with additional check routines."
+  echo ""
+  echo "for further information we suggest to read the user documention in \"doc/\"."
+  echo ""
+  exit
+fi
+
+echo ""
+echo "+- subspace correction methods for QCD applications -+"
+echo "|                                                    |"
+echo "|  Use option >> -? << for help                      |"
+echo "|                                                    |"
+echo "+----------------------------------------------------+"
+echo ""
+
+# compute the number of processes
+
+sed -e /'d0 global lattice:'/p -n $inputfile > tmplatticeg1.txt
+cat tmplatticeg1.txt | grep 'global lattice' | 
+awk -F': '   '{printf $2}' > tmplatticeg2.txt
+
+sed -e /'d0 local lattice:'/p -n $inputfile > tmplatticep1.txt
+cat tmplatticep1.txt | grep 'local lattice' | 
+awk -F': '   '{printf $2}' > tmplatticep2.txt
+
+sed -e /'d0 block lattice:'/p -n $inputfile > tmplatticel1.txt
+cat tmplatticel1.txt | grep 'block lattice' | 
+awk -F': '   '{printf $2}' > tmplatticel2.txt
+
+read -a zahl1 < tmplatticeg2.txt 
+read -a zahl2 < tmplatticep2.txt
+read -a zahl4 < tmplatticel2.txt
+
+i=0
+np=1
+numsub=1
+while [ ! $i = 4 ]
+  do
+  zahl3=$((zahl1[$i]/zahl2[$i]))
+  np=$((np*zahl3))
+
+  zahl5=$((zahl1[$i]/zahl4[$i]))
+  numsub=$((numsub*zahl5))
+
+  i=$((i+1))
+done
+
+sd=$(printf %05i $numsub)
+
+# check input parameters
+
+ipa[0]=0
+ipa[1]=0
+ipa[2]=0
+ipa[3]=0
+
+inputfile=""
+mydebug=""
+i=0
+while [ ! $i = $# ]
+do
+  if [ ${iparam[$i]} = "-o" -o ${iparam[$i]} = "-output" ]
+  then
+    ipa[0]=1
+  elif [ ${iparam[$i]} = "-db" -o ${iparam[$i]} = "-debug" ]
+  then
+    ipa[1]=1
+    mydebug="debug_"
+  elif [ ${iparam[$i]} = "-shared" -o ${iparam[$i]} = "-s" ]
+  then
+    ipa[2]=1
+  elif [ ${iparam[$i]} = "-i" -o ${iparam[$i]} = "-input" ]
+  then
+    ipa[3]=1
+    inputfile=${iparam[$((i+1))]}
+  fi
+  i=$((i+1))
+done
+
+if [ ${ipa[2]} = 0 ]
+then
+  myhost=$(hostname)
+else
+  echo ""
+  echo "Running on the machines:"
+  
+  myhost=""
+  for i in $(cat shared.txt)
+  do
+    echo $i
+    myhost=$myhost$i
+  done
+fi
+
+# name of output file
+
+opf=${zahl1[0]}x${zahl1[1]}x${zahl1[2]}x${zahl1[3]}_np${np}_${myhost}_$(date +"%Y-%m-%d_%H-%M-%S")
+
+# clean buffer files
+
+rm tmplattice*
+
+# some bla bla
+  
+if [ ${ipa[0]} = 1 ]
+then
+  echo ""
+  echo "Outputfile: output/${opf}.txt"
+fi
+
+echo ""
+echo "Number of Processes: $np"
+echo "Program is being started..."
+echo ""
+
+if [ ${ipa[1]} = 0  ]
+then
+  exec=dd_alpha_amg
+else
+  exec=dd_alpha_amg_db
+  echo "You chose the debug version"
+  echo ""
+fi
+
+if [ ${ipa[2]} = 0  ]
+then
+  shareoption=""
+else
+  shareoption="-machinefile shared.txt"
+fi
+
+# run programm
+
+if [ ${ipa[0]} = 0  ]
+then
+#   /opt/mpich/ch-p4/bin/mpirun $shareoption -np $np $exec $inputfile
+  mpirun -default-hostfile /etc/openmpi-default-hostfile $shareoption -np $np $exec $inputfile
+else
+  cp $inputfile output/${opf}.txt
+  echo "" >> output/${opf}.txt
+  echo "" >> output/${opf}.txt
+  echo "+----------------------------------------------------------------------------------+" >> ../output/${opf}.txt
+  echo "|                                  results                                         |" >> ../output/${opf}.txt
+  echo "+----------------------------------------------------------------------------------+" >> ../output/${opf}.txt
+  echo "" >> output/${opf}.txt
+  echo "" >> output/${opf}.txt
+  mpirun -default-hostfile /etc/openmpi-default-hostfile $shareoption -np $np $exec $inputfile >> ../output/${opf}.txt & disown
+fi

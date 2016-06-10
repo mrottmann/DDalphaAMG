@@ -1,0 +1,148 @@
+
+\documentclass[a4paper,12pt]{scrartcl}
+\usepackage{ucs}
+\usepackage[utf8x]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{mathptmx}
+\usepackage[scaled=.92]{helvet}
+\usepackage{courier}
+\usepackage{graphicx}
+\usepackage[pdftex]{color}
+\usepackage[pdftex]{hyperref}
+\usepackage{algorithm}
+\usepackage{algorithmic}
+\usepackage{amsmath}
+\usepackage{amssymb}
+
+\begin{document}
+
+\section{The DDalphaAMG Solver Library}
+
+\subsection{Introduction}
+This \texttt{MPI}-\texttt{C}-Code can be used for solving Wilson-Dirac equations
+\begin{equation*}
+D_W(U,m_0) \psi = \eta
+\end{equation*}
+with an aggregation-based algebraic multigrid (AMG) method. Herein the smoother was chosen as the Schwarz alternating procedure (SAP). The Dirac operator depends on a configuration $U$ which therefore is required as input. The mass parameter $m_0 = 1/(2\kappa)-4$ and other parameters can be adjusted in the parameter file, e.g., \texttt{sample.ini} in the main directory. We expect that the user of this code is familiar with the required basics (usage of \texttt{C}-compilers, \texttt{MPI} libraries as well as lattice QCD, configurations and so on). This code also supports openmp-threading and \texttt{SSE}-optimization. For understanding the method behind this \texttt{C}-code or even for a brief introduction into the structure of the Wilson Dirac operator from lattice QCD, we refer the interested reader to~\cite{Frommer:2013kla,FroKaKrLeRo13,RottmannPhD}. Implementation details can be found in~\cite{RottmannPhD}.
+
+\subsection{Compilation}\label{compile_wilson:ss}
+The main directory contains a makefile example. The standard \texttt{Makefile} should work with a few adjustments (compiler, \texttt{MPI} library, etc.) on the machine of your choice. Once the necessary adjustments of the makefile are done, the command 
+\begin{center}
+\texttt{make} \texttt{-f} \textit{yourmakefile} \texttt{-j} \textit{numberofthreads} \texttt{wilson}
+\end{center}
+should compile the whole entire Wilson solver code, such that it is ready to be run. The makefile also contains additional rules \texttt{library} and \texttt{documentation} for compiling the code as a library and for compiling the user documentation. The library interface can be found in the \texttt{include} folder. Additional \texttt{CFLAGS} are described in Section~\ref{additionalcflags}. 
+
+\subsection{Running the Code}\label{run_wilson:ss}
+Once the code has been compiled, the executables \texttt{dd\_alpha\_amg} and \texttt{dd\_alpha\_amg\_db} can be found in the main directory and run with the typical mpirun commands. The latter executable runs a (slower) debug version with additional check routines. The executables accept a user specified parameter file as optional command line, i.e., the code can be run with
+\begin{center}
+\texttt{mpirun -np} \textit{numberofcores} \texttt{dd\_alpha\_amg} \textit{yourinputfile}
+\end{center}
+The path corresponding to your input file can be stated either relatively to the main directory or as an absolute path. For easy usage we recommend to use a run-script. An example is already included in main directory and can be easily modified for your personal needs.
+
+In order to run the code successfully you will need a \textit{configuration} and a \textit{parameter file}. In the upcoming section you will be guided through the most important aspects of the parameter file in order to make it valid and run the code with your configuration and parameters.
+
+\subsection{Adjusting Parameters}\label{param_wilson:ss}
+In this section we take a closer look at the parameter files \texttt{sample.ini} and \texttt{sample\_devel.ini}. The first is a shorter user oriented version, the latter a longer one for developers. Parameters with (absolutely) obvious meaning are omitted here.
+
+\subsubsection{Configurations}
+First of all the path of your configuration has to be specified (again relative to main directory of absolute). The desired data layout is illustrated in the Appendix section. In the folder \texttt{conf/convert} one can find a converter which converts OPENQCD/DD-HMC configurations into the desired layout. The code is also able to read configurations in lime format, therefore use the parameter \texttt{format:} \texttt{1}, for compilation see Section~\ref{additionalcflags}. Note that you can store the paths of different configurations in the parameter file, the one which is used in the code is always the first parameter file that carries the prefix ``\texttt{configuration:}''. This property also holds for other parameters. In case you want to use two different configurations, one for the hopping term and one for the clover term, you have to enter the respective paths with the prefixes  ``\texttt{hopp cnfg:}'' and ``\texttt{clov cnfg:}'' in your input file. In this case, the prefix ``\texttt{configuration:}'' should not appear in your input file.
+
+\subsubsection{Geometry}
+In the geometry part, the geometry of the lattice (in \texttt{depth0}) and the coarser lattices (in \texttt{depth1}, \texttt{depth2}, $\ldots$) as well as the parallelization have to be defined. Therefore we have to know the following details and respect the following restrictions:
+\begin{itemize}
+\item \texttt{depth0}
+  \begin{itemize}
+    \item \texttt{d0 global lattice}$(\mu)$ describes the $\mu=1,\ldots,4$ lattice dimensions of your configuration.
+    \item \texttt{d0 local lattice}$(\mu)$ determines the number of lattice sites in every direction $\mu$ on a single processor. We assume \texttt{d$i$ global lattice}$(\mu)/$\texttt{d$i$ local lattice}$(\mu)$ to be positive integers.
+    For the number of MPI processes $np$ we have
+    $$ np = \prod_{\mu=1}^4 \texttt{d0 global lattice}(\mu)/\texttt{d0 local lattice}(\mu) \, . $$
+  \end{itemize}
+\item \texttt{depth$i$}, $i \geq 0$.
+  \begin{itemize}
+    \item \texttt{d$i$ block lattice}$(\mu)$ determines the size of the Schwarz blocks. We assume \texttt{d$i$ local lattice}$(\mu)/$\texttt{d$i$ block lattice}$(\mu)$ to be positive integers. Furthermore we need at least two blocks per processor. If possible, we propose a block size of $4^4$.
+    \item The numbers \texttt{d$i$ global lattice}$(\mu)$/\texttt{d$i+1$ global lattice}$(\mu) =: agg_i(\mu)$ have to be positive integers. These quantities determine the coarsening ratio/the aggregate size. Thus we also assume that \texttt{d$i$ local lattice}$(\mu)/agg_i(\mu)$ and $agg_i(\mu)/$\texttt{d$i$ block lattice}$(\mu)$ are positive integers. If possible, we propose $agg_0(\mu)=4$ and $agg_i(\mu)=2$ for $i>0$ and for all $\mu$. When using the \texttt{SSE}-optimized version, we assert  $agg_i(\mu)=$\texttt{d$i$ block lattice}$(\mu)$, i.e., the aggregates have to match the Schwarz blocks on every level.
+    \item We also assume d$i$ global lattice$(\mu)$/d$i$ local lattice$(\mu)$ as a function in $i$ to be monotonically decreasing for all $\mu$. The code allows processes to idle on coarser grids. This can happen since we have less workload on coarser grids. The stated assumption means that the number of processors that are idle can not decrease as we go to a coarser lattice, and once a processor idles on a certain level, he will idle on all coarser levels.    
+    \item \texttt{d$i$ preconditioner cycles}: number of preconditioner cycles in every preconditioner call on level~$i$ (is ignored on the coarsest level).
+    \item \texttt{d$i$ post smooth iter}: number of post smoothing iterations applied on level~$i$ (is ignored on the coarsest level).
+    \item \texttt{d$i$ block iter}: number of iterations for the block solver in SAP on level~$i$ (is ignored on the coarsest level).
+    \item \texttt{d$i$ test vectors}: number of test vectors used on level~$i$. We propose using $20$ test vectors for $i=0$ and $30$ for $i>0$ (is ignored on the coarsest level).
+    \item \texttt{d$i$ setup iter}: number of setup iterations for AMG on the level~$i$ (is ignored on the coarsest level).
+  \end{itemize}
+\end{itemize}
+Please note that further information about how to tune the method sufficiently can be found in~\cite{Frommer:2013kla,FroKaKrLeRo13,RottmannPhD}. When running the code for the first time it is enough to adjust the global, local and block lattice for \texttt{depth0} as well as $m0$ and $c_{sw}$.
+
+\subsubsection{Dirac Operator}
+Adjust the parameters \texttt{m0} and \texttt{csw} according to your $m_0$ and $c_{sw}$ for which you want to solve the Dirac equation. In the header file \texttt{src/clifford.h} you can adjust the Clifford algebra basis representation. The basis representations of BMW-c, OPENQCD/DD-HMC and QCDSF are pre-implemented. In case you want to implement your own representation, please pay attention to our conventions for the Wilson-Dirac operator in~\cite{FroKaKrLeRo13,RottmannPhD}.
+
+\subsubsection{Multilevel Parameters}
+In the multilevel part most of the parameters do not require any additional tuning. Some additional remarks are given here:
+\begin{itemize}
+  \item \texttt{odd even preconditioning}: the coarsest grid can be solved with odd-even preconditioned GMRES and the Schwarz blocks can be solved via odd-even preconditioned minimal residual iteration. If you switch on this parameter, i.e., set it to any other value except \texttt{0}, you have to make sure that $\prod_\mu\texttt{d$c$ local lattice}(\mu) \geq 2$ and \texttt{d$c$ global lattice}$(\mu)$ is even for every $\mu$ where $c$ denoted the coarsest level.
+  The \texttt{SSE} implementation only supports the odd-even preconditioned version of the code.
+  \item \texttt{mixed precision}: set it to \texttt{0} to use the whole method in double precision (not supported by SSE). The value \texttt{1} provides a preconditioner in single precision, the outer FGMRES method is still in double precision. In addition to the value \texttt{1}, the value \texttt{2} provides a mixed precision outer FGMRES routine (caution: for this one the relative residual estimation in FGMRES might be less accurate).
+  \item \texttt{kcycle}: set it to the value \texttt{1} to switch it on or \texttt{0} to switch it off. If \texttt{kcycle} is switched on the standard multigrid V-cycle is replaced by a K-cycle. This cycling strategie can be explained as follows: in a two-level method with GMRES as a coarse grid solver, the coarse grid solver is replaced by an FGMRES method preconditioned with another two-level method of the same kind. It can be viewed as a W-cycle where each level is wrapped by FGMRES. This FGMRES wrapper can be adjusted with a restart length \texttt{kcycle length}, a number restart cycles \texttt{kcycle restarts} and a tolerance for the relative residual \texttt{kcycle tolerance}. Note that all tolerances in this code are concidered as relative and non-squared.
+\end{itemize}
+
+\subsubsection{Tracking Parameters}
+The code offers the possibility to track a parameter. In order to switch this feature on, set \texttt{evaluation} to any value except 0. If an update of setup or shift is required, set the respective parameter to any other value than \texttt{0}.
+
+\subsubsection{Default Values}
+Most of the parameters in the input file are pre-defined with default values which can be checked or even modified in \texttt{src/init.c}. We provide an input file called \texttt{sample.ini} with a quite small number of parameters and another one called \texttt{sample\_devel.ini} with all parameters that can be used. You can extend the short version by any parameter from the long version.
+
+\subsection{Additional CFLAGS for compilation} \label{additionalcflags}
+There are additional \texttt{CFLAGS} in the makefile, mostly for debugging and IO, that you can switch on/off:
+\begin{itemize}
+  \item \texttt{-DPARAMPOUTPUT}: prints a summary of the input parameters.
+  \item \texttt{-DPROFILING}: prints a bunch of profiling information, useful for optimization.
+  \item \texttt{-DTRACK\_RES}: prints relative residual norms during the solve. 
+  \item \texttt{-DCOARSE\_RES}: prints all coarser GMRES final relative residuals during setup and solve.
+  \item \texttt{-DFGMRES\_RESTEST}: computes the true residual after the FGMRES solve and prints it. This is particularly useful when using the parameter \texttt{mixed precision: 2} since estimated and true residual norms can differ.
+  \item \texttt{-DSCHWARZ\_RES}: prints all SAP final relative residuals during setup and solve.
+  \item \texttt{-DTESTVECTOR\_ANALYSIS}: computes the eigenvalue-ishness of all test vectors during the setup phase.
+  \item \texttt{-DSINGLE\_ALLREDUCE\_ARNOLDI}: modifies the Arnoldi iteration such that just on allreduce per iteration is needed. Therefore the norm of the next iterate is computed from inner product results. Please note that this can cause numerical instabilities in ill-conditioned cases. For further information, see~e.g.~\cite{RottmannPhD} and references therein.
+  \item \texttt{-DHAVE\_LIME}: enables the code to read configurations in lime format. It requires an installed version of the c-lime library by USQCD and the enviroment variable \texttt{LIMEDIR} to be set with the installation directory. The functions in the header file \texttt{lime\_io.h} can be used to manage the io required for reading and saving the vectors.
+\end{itemize}
+
+\section{Appendix}
+In this section we offer additional information which might be helpful.
+
+\subsection{Configuration Layout}
+The configuration layout for our AMG solver has the following structure
+%
+\begin{algorithm}[H]
+  \caption{read conf}\label{readconf}
+  \begin{algorithmic}[1]
+    \FOR{$t=1$ to $n_t$}
+      \FOR{$z=1$ to $n_s$}
+	 \FOR{$y=1$ to $n_s$}
+	    \FOR{$x=1$ to $n_s$}
+	      \FOR{$mu=1$ to $4$}
+		\STATE read $U_{t,z,y,x}(mu)$
+	      \ENDFOR
+	    \ENDFOR  
+	 \ENDFOR  
+      \ENDFOR  
+    \ENDFOR  
+  \end{algorithmic}
+\end{algorithm}
+%
+\noindent where $U_{t,z,y,x}(mu) $ has to be stored row major.
+%
+\begin{algorithm}[H]
+  \caption{read $U_{t,z,y,x}(mu)$}\label{readU}
+  \begin{algorithmic}[1]
+    \FOR{$i=1$ to $3$}
+      \FOR{$j=1$ to $3$}
+	\STATE read real($(U_{t,z,y,x}(mu))_{i,j}$)
+	\STATE read imag($(U_{t,z,y,x}(mu))_{i,j}$)
+      \ENDFOR  
+    \ENDFOR
+  \end{algorithmic}
+\end{algorithm}
+%
+\noindent Herein the matrices $U_{t,z,y,x}(mu)$ have to be stored with $18$ \texttt{double} values.
+
+\bibliographystyle{plain}
+\bibliography{user_doc}
+
+\end{document}
