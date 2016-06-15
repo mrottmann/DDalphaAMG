@@ -5,12 +5,9 @@ INSTALL:
 
   The main directory contains a makefile example. The standard makefile
   should work with a few adjustments (compiler and MPI library) on the 
-  machine of your choice. Please note, that the code was built in a 
-  generic manner. Thus, the actual code for compilation is created by 
-  the makefile via pattern substitution right before the compilation.
-  This part of the makefile should not be removed. Once the necessary 
-  adjustments of the makefile are done, the command 
-  "make -f yourmakefile -j numberofthreads wilson"
+  machine of your choice. Once the necessary   adjustments of the
+  makefile are done, the command 
+    "make -f yourmakefile -j numberofthreads wilson"
   should compile the whole entire Wilson solver code, such that it is
   ready to be run. The makefile contains additional rules "library" and
   "documentation" for compiling the code as a library and for compiling
@@ -19,6 +16,6 @@ INSTALL:
 
 HOWTO:
 
-  After having compiled the the user documentation via
+  After having compiled the user documentation via
   "make documentation" please consult the compiled PDF in /doc for
   further information.
