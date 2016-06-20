@@ -20,7 +20,7 @@
  */
 
 #include "main.h"
-#include "dd_alpha_amg.h"
+#include "DDalphaAMG.h"
 
 
 #define NCORE 1
@@ -82,7 +82,7 @@ void run_setup_update( struct Thread *threading ) {
   method_update( g.setup_iter[0], &l, threading );
 }
 
-void run_dd_alpha_amg_setup_if_necessary( struct Thread *threading ) {
+void run_DDalphaAMG_setup_if_necessary( struct Thread *threading ) {
   if( g.mg_setup_status.gauge_updates_since_last_setup >= g.amg_params.discard_setup_after )
     run_setup( threading );
   else if( g.mg_setup_status.gauge_updates_since_last_setup_update >= g.amg_params.update_setup_after )
@@ -92,7 +92,7 @@ void run_dd_alpha_amg_setup_if_necessary( struct Thread *threading ) {
     shift_update( (complex_double)g.mass_for_next_solve, &l, threading );
 }
 
-void dd_alpha_amg_init( dd_alpha_amg_par p ) {
+void DDalphaAMG_init( DDalphaAMG_par p ) {
   
   predefine_rank();
   l_init( &l );
@@ -132,7 +132,7 @@ void dd_alpha_amg_init( dd_alpha_amg_par p ) {
 }
 
 
-void dd_alpha_amg_init_external_threading( dd_alpha_amg_par p, int n_core, int n_thread ) {
+void DDalphaAMG_init_external_threading( DDalphaAMG_par p, int n_core, int n_thread ) {
 
   predefine_rank();
   l_init( &l );
@@ -141,7 +141,7 @@ void dd_alpha_amg_init_external_threading( dd_alpha_amg_par p, int n_core, int n
   g.vector_index_fct = p.vector_index_fct;
   g.bc = p.bc;
   get_global_time = p.global_time;
-  set_dd_alpha_amg_parameters( &(p.amg_params), &l );
+  set_DDalphaAMG_parameters( &(p.amg_params), &l );
   g.csw = p.csw;
   g.setup_m0 = p.setup_m0;
   l.real_shift = p.m0;
@@ -173,19 +173,19 @@ void dd_alpha_amg_init_external_threading( dd_alpha_amg_par p, int n_core, int n
 }
 
 
-double *dd_alpha_amg_get_gauge_pointer() {
+double *DDalphaAMG_get_gauge_pointer() {
   return dirac_setup_get_gauge_pointer();
 }
-double *dd_alpha_amg_get_clover_pointer() {
+double *DDalphaAMG_get_clover_pointer() {
   return dirac_setup_get_clover_pointer();
 }
-void dd_alpha_amg_fields_updated() {
+void DDalphaAMG_fields_updated() {
   g.mg_setup_status.gauge_updates_since_last_setup++;
   g.mg_setup_status.gauge_updates_since_last_setup_update++;
 }
 
 
-double dd_alpha_amg_set_conf( double *gauge_field ) {
+double DDalphaAMG_set_conf( double *gauge_field ) {
   
   int t, z, y, x, mu, i, j, k, *ll = l.local_lattice, ifail=0, tg;
   double *hopp = NULL,*clover = NULL;
@@ -234,7 +234,7 @@ double dd_alpha_amg_set_conf( double *gauge_field ) {
   }
   
   if (ifail)
-    error0("Error in \"dd_alpha_amg_set_conf\": Gauge field does not fit expected boundary conditions.\n");
+    error0("Error in \"DDalphaAMG_set_conf\": Gauge field does not fit expected boundary conditions.\n");
   
   if (g.bc>0)
     dirac_setup( (complex_double*) hopp, (complex_double*) hopp, &l );
@@ -250,12 +250,12 @@ double dd_alpha_amg_set_conf( double *gauge_field ) {
 }
 
 
-void dd_alpha_amg_update_parameters( const struct dd_alpha_amg_parameters *amg_params ) {
-  update_dd_alpha_amg_parameters( amg_params, &l );
+void DDalphaAMG_update_parameters( const struct DDalphaAMG_parameters *amg_params ) {
+  update_DDalphaAMG_parameters( amg_params, &l );
 }
 
 
-void dd_alpha_amg_setup( int iterations, int *status ) {
+void DDalphaAMG_setup( int iterations, int *status ) {
   
   g.coarse_iter_count = 0;
   if ( g.setup_flag )
@@ -272,7 +272,7 @@ void dd_alpha_amg_setup( int iterations, int *status ) {
   status[0] = 1;
   g.conf_flag = 0;
 }
-void dd_alpha_amg_setup_external_threading( int iterations, int *status,
+void DDalphaAMG_setup_external_threading( int iterations, int *status,
     int core, int thread, void *thread_barrier_data, void (*thread_barrier)(void *, int) ) {
 
   int thread_id = get_thread_id( core, thread );
@@ -285,7 +285,7 @@ void dd_alpha_amg_setup_external_threading( int iterations, int *status,
 }
 
 
-void dd_alpha_amg_setup_update( int iterations, int *status ) {
+void DDalphaAMG_setup_update( int iterations, int *status ) {
 
   if ( g.conf_flag == 1 ) {
     g.conf_flag = 0;
@@ -308,7 +308,7 @@ void dd_alpha_amg_setup_update( int iterations, int *status ) {
   status[1] = g.coarse_iter_count;
   status[0] = 1;
 }
-void dd_alpha_amg_setup_update_external_threading( int iterations, int *status,
+void DDalphaAMG_setup_update_external_threading( int iterations, int *status,
     int core, int thread, void *thread_barrier_data, void (*thread_barrier)(void *, int) ) {
 
   int thread_id = get_thread_id( core, thread );
@@ -321,7 +321,7 @@ void dd_alpha_amg_setup_update_external_threading( int iterations, int *status,
 }
 
 
-double dd_alpha_amg_wilson_solve( double *vector_out, double *vector_in, double tol, double scale_even, double scale_odd, int *status ) {
+double DDalphaAMG_wilson_solve( double *vector_out, double *vector_in, double tol, double scale_even, double scale_odd, int *status ) {
   
   int t, z, y, x, i, j, k, clover_size, *ll = l.local_lattice;
   
@@ -395,7 +395,7 @@ double dd_alpha_amg_wilson_solve( double *vector_out, double *vector_in, double 
 }
 
 
-void dd_alpha_amg_free( void ) {
+void DDalphaAMG_free( void ) {
   
   finalize_common_thread_data(commonthreaddata);
   finalize_no_threading(no_threading);

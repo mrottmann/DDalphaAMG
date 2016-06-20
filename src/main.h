@@ -29,12 +29,7 @@
 #include <time.h>
 #include <stdarg.h>
 
-#ifdef JUROPA
-#include <mkl.h>
-#endif
-
-#include "dd_alpha_amg_parameters.h"
-#include "dd_alpha_amg_setup_status.h"
+#include "DDalphaAMG.h"
 
 #ifndef MAIN_HEADER
   #define MAIN_HEADER
@@ -260,6 +255,11 @@
     
   } gmres_MP_struct;
 
+  typedef struct DDalphaAMG_setup_status {
+    int gauge_updates_since_last_setup;
+    int gauge_updates_since_last_setup_update;
+  } DDalphaAMG_setup_status;
+
   typedef struct level_struct {    
     
     // distributed: non-idling processes of previos level
@@ -381,8 +381,8 @@
     complex_double **gamma, g5D_shift;
     var_table vt;
 
-    struct dd_alpha_amg_parameters amg_params;
-    struct dd_alpha_amg_setup_status mg_setup_status;
+    struct DDalphaAMG_parameters amg_params;
+    struct DDalphaAMG_setup_status mg_setup_status;
     double mass_for_next_solve;
     
   } global_struct;

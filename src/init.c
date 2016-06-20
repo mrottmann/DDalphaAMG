@@ -383,7 +383,7 @@ void method_init( int *argc, char ***argv, level_struct *l ) {
 * - char ***argv: In case inputfile is provided, contains name of this file.
 * 
 * CAUTION: changes in this function have no influence on the interface         
-* library, cf. dd_alpha_amg_init.                                                    
+* library, cf. DDalphaAMG_init.                                                    
 *********************************************************************************/
 
   char inputfile[STRINGLENGTH];
@@ -631,7 +631,7 @@ void read_global_info( FILE *in ) {
   read_parameter( &save_pt, "number of openmp threads:", "%d", 1, in, _DEFAULT_SET );
 }
 
-void set_global_info( struct dd_alpha_amg_parameters *amg_params ) {
+void set_global_info( struct DDalphaAMG_parameters *amg_params ) {
   g.num_levels = amg_params->number_of_levels;
   g.anti_pbc = 0;
 }
@@ -814,7 +814,7 @@ void read_geometry_data( FILE *in, int ls ) {
   }
 }
 
-void set_geometry_data( struct dd_alpha_amg_parameters *amg_params ) {
+void set_geometry_data( struct DDalphaAMG_parameters *amg_params ) {
   int ls = MAX(g.num_levels, 2);
   for ( int i=0; i<ls; i++ ) {
     for ( int mu=0; mu<4; mu++ ) {
@@ -873,7 +873,7 @@ void read_solver_parameters( FILE *in, level_struct *l ) {
     srand( 1000*g.my_rank );
 }
 
-void set_solver_parameters( struct dd_alpha_amg_parameters *amg_params, level_struct *l ) {
+void set_solver_parameters( struct DDalphaAMG_parameters *amg_params, level_struct *l ) {
 
   g.mixed_precision = 1;
   g.interpolation = 2;
@@ -997,7 +997,7 @@ void validate_parameters( int ls, level_struct *l ) {
       ASSERT( DIVIDES( g.global_lattice[i][mu]/g.global_lattice[i+1][mu], g.local_lattice[i][mu] ) ); 
       ASSERT( DIVIDES( g.block_lattice[i][mu], g.global_lattice[i][mu]/g.global_lattice[i+1][mu] ) );
 #ifdef SSE
-      if ( ! g.block_lattice[i][mu] == g.global_lattice[i][mu]/g.global_lattice[i+1][mu] )
+      if ( g.block_lattice[i][mu] != g.global_lattice[i][mu]/g.global_lattice[i+1][mu] )
         warning0("when using SSE, Schwarz block size and aggregate size have to match.\n");
       ASSERT( g.block_lattice[i][mu] == g.global_lattice[i][mu]/g.global_lattice[i+1][mu] );
 #endif
@@ -1136,7 +1136,7 @@ void lg_in( char *inputfile, level_struct *l ) {
   fclose(in);
 }
 
-void update_parameters_in_global_struct( const struct dd_alpha_amg_parameters *amg_params ) {
+void update_parameters_in_global_struct( const struct DDalphaAMG_parameters *amg_params ) {
   // changes only parameters that can also be changed after initial setup
   int ls = MAX(g.num_levels, 2);
   for ( int i=0; i<ls; i++ ) {
@@ -1157,7 +1157,7 @@ void update_parameters_in_level_structs( level_struct *l ) {
     update_parameters_in_level_structs( l->next_level );
 }
 
-void set_dd_alpha_amg_parameters( struct dd_alpha_amg_parameters *amg_params, level_struct *l ) {
+void set_DDalphaAMG_parameters( struct DDalphaAMG_parameters *amg_params, level_struct *l ) {
 
   g.amg_params = *amg_params;
   set_default_global_info();
@@ -1176,7 +1176,7 @@ void set_dd_alpha_amg_parameters( struct dd_alpha_amg_parameters *amg_params, le
   validate_parameters( ls, l );
 }
 
-void update_dd_alpha_amg_parameters( const struct dd_alpha_amg_parameters *amg_params, level_struct *l ) {
+void update_DDalphaAMG_parameters( const struct DDalphaAMG_parameters *amg_params, level_struct *l ) {
   update_parameters_in_global_struct( amg_params );
   update_parameters_in_level_structs( l );
 }

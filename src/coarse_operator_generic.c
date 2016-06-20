@@ -510,7 +510,7 @@ void coarse_operator_PRECISION_test_routine( level_struct *l, struct Thread *thr
         if ( !l->next_level->idle ) {
           vector_PRECISION_minus( vc3, vc2, vc3, 0, civs, l->next_level );
           diff = global_norm_PRECISION( vc3, 0, civs, l->next_level, no_threading ) / global_norm_PRECISION( vc2, 0, civs, l->next_level, no_threading );
-          if ( l->level==1 && g.odd_even )
+          if ( l->level==1 && g.odd_even ) //TODO: this test doesn't work without SSE!!
             printf0("depth: %d, correctness of odd even preconditioned ( P* D P - D_c ) phi_c with D_c threaded: %le\n", l->depth, diff );
           else
             printf0("depth: %d, correctness of ( P* D P - D_c ) phi_c with D_c threaded: %le\n", l->depth, diff );
