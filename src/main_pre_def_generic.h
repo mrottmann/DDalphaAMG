@@ -46,11 +46,13 @@
   
   typedef struct {
     config_PRECISION D, clover, oe_clover;
+#ifdef HAVE_TM
+    config_PRECISION odd_proj, tm_term;
+#endif
     int oe_offset, self_coupling, num_even_sites, num_odd_sites,
         *index_table, *neighbor_table, *translation_table, table_dim[4],
         *backward_neighbor_table,
         table_mod_dim[4], *config_boundary_table[4];
-    complex_PRECISION shift;
     vector_PRECISION *buffer, prnT, prnZ, prnY, prnX, prpT, prpZ, prpY, prpX;
     comm_PRECISION_struct c;
     OPERATOR_TYPE_PRECISION *D_vectorized;

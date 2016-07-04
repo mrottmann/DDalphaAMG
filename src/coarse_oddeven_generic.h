@@ -24,7 +24,11 @@
 
   struct Thread;
   
+#ifndef HAVE_TM  
   void coarse_selfcoupling_LU_decomposition_PRECISION( config_PRECISION output, config_PRECISION input, level_struct *l );
+#else
+  void coarse_selfcoupling_LU_decomposition_PRECISION( const config_PRECISION output, config_PRECISION input, config_PRECISION input_anti, level_struct *l );
+#endif
   void coarse_perform_fwd_bwd_subs_PRECISION( vector_PRECISION x, vector_PRECISION b, config_PRECISION A, level_struct *l );
   
   void coarse_oddeven_setup_PRECISION( operator_PRECISION_struct *in, int reorder, level_struct *l );

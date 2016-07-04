@@ -28,9 +28,8 @@ void block_d_plus_clover_PRECISION( vector_PRECISION eta, vector_PRECISION phi, 
 
   START_UNTHREADED_FUNCTION(threading)
   
-  int i, n = s->num_block_sites, *length = s->dir_length, **index = s->index, *neighbor = s->op.neighbor_table;
+  int n = s->num_block_sites, *length = s->dir_length, **index = s->index, *neighbor = s->op.neighbor_table;
   vector_PRECISION lphi = phi+start, leta = eta+start;
-  config_PRECISION clover = (g.csw==0.0)?s->op.clover+start:s->op.clover+(start/12)*42;
 #ifdef OPTIMIZED_NEIGHBOR_COUPLING_PRECISION
   PRECISION *Dplus = s->op.D_vectorized + (start/12)*96;
   PRECISION *Dminus = s->op.D_transformed_vectorized + (start/12)*96;
@@ -40,22 +39,17 @@ void block_d_plus_clover_PRECISION( vector_PRECISION eta, vector_PRECISION phi, 
   config_PRECISION D_pt;
   config_PRECISION D = s->op.D + (start/12)*36;
 #endif
-#ifdef OPTIMIZED_SELF_COUPLING_PRECISION
-  PRECISION* clover_vectorized = (PRECISION*) (s->op.clover_vectorized+start*12);
-#endif
-  
+
   // clover term
-  if ( g.csw == 0.0 ) {
-    clover_PRECISION( leta, lphi, clover, 12*n, l, threading ); 
-  } else {
-    for ( i=0; i<n; i++ ) {
 #ifdef OPTIMIZED_SELF_COUPLING_PRECISION
-      sse_site_clover_PRECISION( (PRECISION*)(leta+12*i), (PRECISION*)(lphi+12*i), clover_vectorized+144*i );
+  sse_clover_PRECISION(eta, phi, &(s->op), start, start+12*n, l, no_threading );
 #else
-      site_clover_PRECISION( leta+12*i, lphi+12*i, clover+42*i );
+  config_PRECISION clover = (g.csw==0.0)?s->op.clover+start:s->op.clover+(start/12)*42;
+  clover_PRECISION( leta, lphi, clover, 12*n, l, no_threading ); 
+#ifdef HAVE_TM
+  add_diagonal_PRECISION( leta, lphi, s->op.tm_term+start, 12*n );
 #endif
-    }
-  }
+#endif
   
 #ifdef OPTIMIZED_NEIGHBOR_COUPLING_PRECISION
   for ( int mu=0; mu<4; mu++ ) {
@@ -119,8 +113,6 @@ void block_d_plus_clover_PRECISION( vector_PRECISION eta, vector_PRECISION phi, 
 
 
 #if defined(OPTIMIZED_NEIGHBOR_COUPLING_PRECISION) || defined(OPTIMIZED_SELF_COUPLING_PRECISION)
-void sse_clover_PRECISION( vector_PRECISION eta, vector_PRECISION phi, operator_PRECISION_struct *op,
-                           int start, int end, level_struct *l, struct Thread *threading );
 void d_plus_clover_PRECISION( vector_PRECISION eta, vector_PRECISION phi, operator_PRECISION_struct *op,
                               level_struct *l, struct Thread *threading ) {
   
@@ -136,11 +128,16 @@ void d_plus_clover_PRECISION( vector_PRECISION eta, vector_PRECISION phi, operat
   
   SYNC_MASTER_TO_ALL(threading)
 
-  if ( g.csw == 0.0 ) {
-    vector_PRECISION_scale( eta, phi, op->shift, start, end, l );
-  } else {
-    clover_PRECISION( eta+start, phi+start, op->clover+((start/12)*42), end-start, l, threading );
-  }
+#ifdef OPTIMIZED_SELF_COUPLING_PRECISION
+  sse_clover_PRECISION(eta, phi, op, start, end, l, threading );
+#else
+  vector_PRECISION lphi = phi+start, leta = eta+start;
+  config_PRECISION clover = (g.csw==0.0)?op->clover+start:op->clover+(start/12)*42;
+  clover_PRECISION( leta, lphi, clover, end-start, l, threading ); 
+#ifdef HAVE_TM
+  add_diagonal_PRECISION( leta, lphi, op->tm_term+start, end-start );
+#endif
+#endif
   
   START_MASTER(threading)
   PROF_PRECISION_START( _NC ); 

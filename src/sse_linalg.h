@@ -494,4 +494,4 @@ static inline void sse_aggregate_block_minus_block_times_dot_float( float *B, fl
 }
 
 #endif // SSE
-#endif // LINALG_MIC_H
+#endif

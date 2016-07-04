@@ -23,7 +23,8 @@
 
 
 void test_routine( level_struct *l, struct Thread *threading ) {
-  
+
+  g.test = 0;
   if ( g.method > 0 ) {
     if ( g.mixed_precision ) {
       operator_float_test_routine( &(l->s_float.op), l, threading );
@@ -44,6 +45,10 @@ void test_routine( level_struct *l, struct Thread *threading ) {
   }
 
   START_LOCKED_MASTER(threading)
+  if (g.test < 1e-5)
+    printf0("TESTS passed, max error %e < 1e-5", g.test);
+  else
+    warning0("some TEST not passed, max error %e > 1e-5", g.test);
   printf0("\n");
   prof_init( l );
   END_LOCKED_MASTER(threading)

@@ -42,4 +42,4 @@ static inline void set_PRECISION_D_vectorized( PRECISION *out1, PRECISION *out2,
 #endif
 
 #endif // SSE
-#endif // LINALG_MIC_H
+#endif 

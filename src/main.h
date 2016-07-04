@@ -29,16 +29,17 @@
 #include <time.h>
 #include <stdarg.h>
 
-#include "DDalphaAMG.h"
-
 #ifndef MAIN_HEADER
   #define MAIN_HEADER
-  
+
   #define STRINGLENGTH 500
   
   #define _FILE_OFFSET_BITS 64
   #define EPS_float 1E-6
   #define EPS_double 1E-14
+
+  #define HAVE_TM // flag for enable twisted mass
+  #undef INIT_ONE_PREC // flag undef for enabling additional features in the lib
   
   #define FOR2( e ) { e e }
   #define FOR3( e ) { e e e }
@@ -99,13 +100,17 @@
   if ( g.cur_storage > g.max_storage ) g.max_storage = g.cur_storage; }while(0)
 #endif
 
+  #define FREE( variable, kind, length ) do{ if ( variable != NULL ) { \
+  free( variable ); variable = NULL; g.cur_storage -= (sizeof(kind) * (length))/(1024.0*1024.0); } else { \
+  printf0("multiple free of \"%s\"? pointer is already NULL (%s:%d).\n", #variable, __FILE__, __LINE__ ); } }while(0)
+
+
   // allocate and deallocate macros (hugepages, aligned)
   #include <fcntl.h>
   #include <sys/mman.h>
   #define HUGE_PAGE_SIZE (2 * 1024 * 1024)
   #define ROUND_UP_TO_FULL_PAGE(x) \
     (((x) + HUGE_PAGE_SIZE - 1) / HUGE_PAGE_SIZE * HUGE_PAGE_SIZE)
-  
   
 //   void *tmppointer = (void*)(variable);
 //   posix_memalign( &tmppointer, alignment, sizeof(kind)*(length));
@@ -121,19 +126,14 @@
   g.cur_storage += (sizeof(kind) * (length))/(1024.0*1024.0); \
   if ( g.cur_storage > g.max_storage ) g.max_storage = g.cur_storage; }while(0)
   
-  #define FREE_HUGEPAGES( addr, kind, length ) do { free( addr ); \
-  g.cur_storage -= (sizeof(kind) * (length))/(1024.0*1024.0); }while(0)
+  #define FREE_HUGEPAGES( addr, kind, length ) FREE( addr, kind, length )
   
   #ifdef DEBUG
     #define DPRINTF0 printf0
   #else
     #define DPRINTF0( ARGS, ... )
   #endif
-  
-  #define FREE( variable, kind, length ) do{ if ( variable != NULL ) { \
-  free( variable ); variable = NULL; g.cur_storage -= (sizeof(kind) * (length))/(1024.0*1024.0); } else { \
-  printf0("multiple free of \"%s\"? pointer is already NULL (%s:%d).\n", #variable, __FILE__, __LINE__ ); } }while(0)
-  
+    
   #define PUBLIC_MALLOC( variable, kind, size ) do{ START_MASTER(threading) MALLOC( variable, kind, size ); \
   ((kind**)threading->workspace)[0] = variable; END_MASTER(threading) SYNC_MASTER_TO_ALL(threading) \
   variable = ((kind**)threading->workspace)[0]; SYNC_MASTER_TO_ALL(threading) }while(0)
@@ -195,6 +195,7 @@
   enum { _COARSE_GLOBAL };
   enum { _FULL_SYSTEM, _EVEN_SITES, _ODD_SITES };
   enum { _LEFT, _RIGHT, _NOTHING };
+  enum { _PERIODIC, _ANTIPERIODIC, _TWISTED, _DIRICHLET };
   enum { _GIP, _PIP, _LA2, _LA6, _LA8, _LA, _CPY, _SET, _PR, _SC, _NC, _SM, _OP_COMM, _OP_IDLE, _ALLR, _GD_COMM, _GD_IDLE, _GRAM_SCHMIDT, _GRAM_SCHMIDT_ON_AGGREGATES,
       _SM1, _SM2, _SM3, _SM4, _SMALL1, _SMALL2, _NUM_PROF }; // _NUM_PROF has always to be the last constant!
   enum { _VTS = 20 };
@@ -254,11 +255,6 @@
     gmres_double_struct dp;
     
   } gmres_MP_struct;
-
-  typedef struct DDalphaAMG_setup_status {
-    int gauge_updates_since_last_setup;
-    int gauge_updates_since_last_setup_update;
-  } DDalphaAMG_setup_status;
 
   typedef struct level_struct {    
     
@@ -326,6 +322,10 @@
     // operator
     double real_shift;
     complex_double dirac_shift, even_shift, odd_shift;
+#ifdef HAVE_TM
+    int block_size;
+    complex_double tm_shift, tm_even_shift, tm_odd_shift;
+#endif
     // buffer vectors
     vector_float vbuf_float[9], sbuf_float[2];
     vector_double vbuf_double[9], sbuf_double[2];
@@ -354,14 +354,14 @@
     MPI_Comm comm_cart;
     MPI_Group global_comm_group;
     MPI_Request sreqs[8], rreqs[8];
-    int num_processes, my_rank, my_coords[4], two_cnfgs, tv_io_single_file, num_openmp_processes;
+    int num_processes, my_rank, my_coords[4], tv_io_single_file, num_openmp_processes;
     // string buffers
     char in[STRINGLENGTH], in_clov[STRINGLENGTH], source_list[STRINGLENGTH], tv_io_file_name[STRINGLENGTH];
     // geometry, method parameters
     int num_levels, num_desired_levels, process_grid[4], in_format,
         **global_lattice, **local_lattice, **block_lattice, 
         *post_smooth_iter, *block_iter, *setup_iter, *ncycle,
-        method, odd_even, anti_pbc, rhs, propagator_coords[4],
+        method, odd_even, rhs, propagator_coords[4],
         interpolation, randomize, *num_eig_vect, num_coarse_eig_vect, kcycle, mixed_precision,
         restart, max_restart, kcycle_restart, kcycle_max_restart, coarse_iter, coarse_restart;
     double tol, coarse_tol, kcycle_tol, csw, rho, *relax_fac;
@@ -369,21 +369,26 @@
     // profiling, analysis, output
     int coarse_iter_count, iter_count, iterator, print, conf_flag, setup_flag, in_setup;
     double coarse_time, prec_time, *output_table[8], cur_storage, max_storage, total_time,
-           plaq_hopp, plaq_clov, norm_res, plaq, setup_m0, solve_m0, bicgstab_tol;
+      plaq_hopp, plaq_clov, norm_res, plaq, setup_m0, solve_m0, bicgstab_tol, twisted_bc[4],
+      test;
+
+#ifdef HAVE_TM
+    // twisted mass parameters
+    int downprop;
+    double tm_mu, setup_tm_mu, tm_mu_odd_shift, tm_mu_even_shift, *tm_mu_factor;
+#endif
            
     // index functions for external usage
     int (*conf_index_fct)(), (*vector_index_fct)();
     int *odd_even_table;
+    int (*Cart_rank)(MPI_Comm comm, const int coords[], int *rank);
+    int (*Cart_coords)(MPI_Comm comm, int rank, int maxdims, int coords[]);
     
     // bc: 0 dirichlet, 1 periodic, 2 anti-periodic
     int bc; 
     
-    complex_double **gamma, g5D_shift;
+    complex_double **gamma;
     var_table vt;
-
-    struct DDalphaAMG_parameters amg_params;
-    struct DDalphaAMG_setup_status mg_setup_status;
-    double mass_for_next_solve;
     
   } global_struct;
 
@@ -404,7 +409,21 @@
     }
     END_MASTER(no_threading)
   }
-  
+
+  static inline void printf00( char* format, ... ) {
+    if ( g.my_rank == 0 && g.print >= 0 ) {
+      va_list argpt;
+      va_start(argpt,format);
+      vprintf(format,argpt);
+#ifdef WRITE_LOGFILE
+      vfprintf(g.logfile,format,argpt);
+      fflush(g.logfile);
+#endif
+      va_end(argpt);
+      fflush(0);
+    }
+  }
+
   static inline void warning0( char* format, ... ) {
     if ( g.my_rank == 0 && g.print >= 0 ) {
       printf("\x1b[31mwarning: ");
@@ -435,20 +454,6 @@
       printf("\x1b[0m");
       fflush(0);
       MPI_Abort( MPI_COMM_WORLD, 0 );
-    }
-  }
-  
-  static inline void printf00( char* format, ... ) {
-    if ( g.my_rank == 0 && g.print >= 0 ) {
-      va_list argpt;
-      va_start(argpt,format);
-      vprintf(format,argpt);
-#ifdef WRITE_LOGFILE
-      vfprintf(g.logfile,format,argpt);
-      fflush(g.logfile);
-#endif
-      va_end(argpt);
-      fflush(0);
     }
   }
   

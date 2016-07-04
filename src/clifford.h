@@ -28,7 +28,8 @@
   // BASIS1: Basis used for BMW-c lattices
   // BASIS2: Basis used for QCDSF lattices
   // BASIS3: Basis used in the QOPQDP Code
-  #define BASIS0 // change here
+  // BASIS4: Basis used in the tmLQCD Code
+  #define BASIS4 // change here
   
   enum { T, Z, Y, X };
   
@@ -524,6 +525,129 @@
           #define GAMMA_Y_SHUFFLE(A) A
           #define GAMMA_X_SHUFFLE(A) _mm_shuffle_pd(A,A,_MM_SHUFFLE2(0,1))
 #endif
+#else
+    #ifdef BASIS4
+      // tmLQCD BASIS with an addition change of sign in gamma5
+      //applied changing the order of spin component in the rhs and solution
+      #define CLIFFORD_BASIS "BASIS4: tmLQCD basis"
+      /* gamma_T =
+      *  0  0 -1  0 
+      *  0  0  0 -1
+      * -1  0  0  0
+      *  0 -1  0  0  
+      */
+      #define GAMMA_T_SPIN0_CO   2
+      #define GAMMA_T_SPIN0_VAL -1
+      #define GAMMA_T_SPIN1_CO   3
+      #define GAMMA_T_SPIN1_VAL -1
+      #define GAMMA_T_SPIN2_CO   0
+      #define GAMMA_T_SPIN2_VAL -1
+      #define GAMMA_T_SPIN3_CO   1
+      #define GAMMA_T_SPIN3_VAL -1
+
+      /* gamma_Z =
+      *  0  0 -I  0
+      *  0  0  0  I
+      *  I  0  0  0
+      *  0 -I  0  0  
+      */
+      #define GAMMA_Z_SPIN0_CO   2
+      #define GAMMA_Z_SPIN0_VAL -I
+      #define GAMMA_Z_SPIN1_CO   3
+      #define GAMMA_Z_SPIN1_VAL  I
+      #define GAMMA_Z_SPIN2_CO   0
+      #define GAMMA_Z_SPIN2_VAL  I
+      #define GAMMA_Z_SPIN3_CO   1
+      #define GAMMA_Z_SPIN3_VAL -I
+
+      /* gamma_Y =
+      *  0  0  0 -1
+      *  0  0  1  0
+      *  0  1  0  0
+      * -1  0  0  0  
+      */
+      #define GAMMA_Y_SPIN0_CO   3
+      #define GAMMA_Y_SPIN0_VAL -1
+      #define GAMMA_Y_SPIN1_CO   2
+      #define GAMMA_Y_SPIN1_VAL  1
+      #define GAMMA_Y_SPIN2_CO   1
+      #define GAMMA_Y_SPIN2_VAL  1
+      #define GAMMA_Y_SPIN3_CO   0
+      #define GAMMA_Y_SPIN3_VAL -1
+
+      /* gamma_X =
+      *  0  0  0  I
+      *  0  0  I  0
+      *  0 -I  0  0
+      * -I  0  0  0  
+      */
+      #define GAMMA_X_SPIN0_CO   3
+      #define GAMMA_X_SPIN0_VAL  I
+      #define GAMMA_X_SPIN1_CO   2
+      #define GAMMA_X_SPIN1_VAL  I
+      #define GAMMA_X_SPIN2_CO   1
+      #define GAMMA_X_SPIN2_VAL -I
+      #define GAMMA_X_SPIN3_CO   0
+      #define GAMMA_X_SPIN3_VAL -I
+#ifdef SSE
+      #define GAMMA_T_SPIN0_RE_SIGN -1
+      #define GAMMA_T_SPIN1_RE_SIGN -1
+      #define GAMMA_T_SPIN2_RE_SIGN -1
+      #define GAMMA_T_SPIN3_RE_SIGN -1
+      #define GAMMA_T_SPIN0_IM_SIGN -1
+      #define GAMMA_T_SPIN1_IM_SIGN -1
+      #define GAMMA_T_SPIN2_IM_SIGN -1
+      #define GAMMA_T_SPIN3_IM_SIGN -1
+      #define GAMMA_T_SPIN0_OFFSET 0
+      #define GAMMA_T_SPIN1_OFFSET 0
+      #define GAMMA_T_SPIN2_OFFSET 0
+      #define GAMMA_T_SPIN3_OFFSET 0
+      
+      #define GAMMA_Z_SPIN0_RE_SIGN +1
+      #define GAMMA_Z_SPIN1_RE_SIGN -1
+      #define GAMMA_Z_SPIN2_RE_SIGN -1
+      #define GAMMA_Z_SPIN3_RE_SIGN +1
+      #define GAMMA_Z_SPIN0_IM_SIGN -1
+      #define GAMMA_Z_SPIN1_IM_SIGN +1
+      #define GAMMA_Z_SPIN2_IM_SIGN +1
+      #define GAMMA_Z_SPIN3_IM_SIGN -1
+      #define GAMMA_Z_SPIN0_OFFSET 1
+      #define GAMMA_Z_SPIN1_OFFSET 1
+      #define GAMMA_Z_SPIN2_OFFSET 1
+      #define GAMMA_Z_SPIN3_OFFSET 1
+      
+      #define GAMMA_Y_SPIN0_RE_SIGN -1
+      #define GAMMA_Y_SPIN1_RE_SIGN +1
+      #define GAMMA_Y_SPIN2_RE_SIGN +1
+      #define GAMMA_Y_SPIN3_RE_SIGN -1
+      #define GAMMA_Y_SPIN0_IM_SIGN -1
+      #define GAMMA_Y_SPIN1_IM_SIGN +1
+      #define GAMMA_Y_SPIN2_IM_SIGN +1
+      #define GAMMA_Y_SPIN3_IM_SIGN -1
+      #define GAMMA_Y_SPIN0_OFFSET 0
+      #define GAMMA_Y_SPIN1_OFFSET 0
+      #define GAMMA_Y_SPIN2_OFFSET 0
+      #define GAMMA_Y_SPIN3_OFFSET 0
+      
+      #define GAMMA_X_SPIN0_RE_SIGN -1
+      #define GAMMA_X_SPIN1_RE_SIGN -1
+      #define GAMMA_X_SPIN2_RE_SIGN +1
+      #define GAMMA_X_SPIN3_RE_SIGN +1
+      #define GAMMA_X_SPIN0_IM_SIGN +1
+      #define GAMMA_X_SPIN1_IM_SIGN +1
+      #define GAMMA_X_SPIN2_IM_SIGN -1
+      #define GAMMA_X_SPIN3_IM_SIGN -1
+      #define GAMMA_X_SPIN0_OFFSET 1
+      #define GAMMA_X_SPIN1_OFFSET 1
+      #define GAMMA_X_SPIN2_OFFSET 1
+      #define GAMMA_X_SPIN3_OFFSET 1
+      
+      #define GAMMA_T_SHUFFLE(A) A
+      #define GAMMA_Z_SHUFFLE(A) _mm_shuffle_pd(A,A,_MM_SHUFFLE2(0,1))
+      #define GAMMA_Y_SHUFFLE(A) A
+      #define GAMMA_X_SHUFFLE(A) _mm_shuffle_pd(A,A,_MM_SHUFFLE2(0,1))
+#endif      /* ------------------------------------------------- */
+          #endif
         #endif
       #endif
     #endif

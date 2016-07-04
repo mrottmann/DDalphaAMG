@@ -53,6 +53,15 @@ void coarse_grid_correction_PRECISION_setup( level_struct *l, struct Thread *thr
     } else {
       interpolation_PRECISION_dummy_alloc( l->next_level );
     }
+
+#ifdef HAVE_TM
+    l->next_level->tm_shift = g.tm_mu*g.tm_mu_factor[l->next_level->depth];
+    l->next_level->tm_even_shift = g.tm_mu_even_shift*g.tm_mu_factor[l->next_level->depth];
+    l->next_level->tm_odd_shift = g.tm_mu_odd_shift*g.tm_mu_factor[l->next_level->depth];
+
+    if( g.tm_mu_factor[l->next_level->depth]!=g.tm_mu_factor[l->depth] )
+      tm_term_PRECISION_setup( l->next_level->op_PRECISION.tm_term, l->next_level->op_PRECISION.odd_proj, l->next_level, no_threading );
+#endif
     
     conf_PRECISION_gather( &(l->next_level->s_PRECISION.op), &(l->next_level->op_PRECISION), l->next_level );
     
@@ -207,7 +216,9 @@ void interpolation_PRECISION_define( vector_double *V, level_struct *l, struct T
     
     START_MASTER(threading)
     if ( g.print > 0 ) printf0("initial definition --- depth: %d\n", l->depth );
+#ifdef DEBUG
     if ( g.print > 0 ) { printf0("\033[0;42m\033[1;37m|"); fflush(0); }
+#endif
     END_MASTER(threading)
     
     for ( k=0; k<n; k++ ) {
@@ -228,9 +239,11 @@ void interpolation_PRECISION_define( vector_double *V, level_struct *l, struct T
       vector_PRECISION_copy( l->is_PRECISION.test_vector[k], buffer[0], start, end, l );
         
       pc += 6;
+#ifdef DEBUG
       START_MASTER(threading)
       if ( pc >= 0.2*pi*pn ) { if ( g.print > 0 ) printf0("%4d%% |", 20*pi); if ( g.my_rank == 0 ) fflush(0); pi++; }
       END_MASTER(threading)
+#endif
     }
     
     PUBLIC_FREE( buffer[0], complex_PRECISION, l->vector_size*3 );
@@ -242,9 +255,11 @@ void interpolation_PRECISION_define( vector_double *V, level_struct *l, struct T
                                   start, end, l );
     }
     
+#ifdef DEBUG
     START_MASTER(threading)
     if ( g.print > 0 ) printf0("\033[0m\n");
     END_MASTER(threading)
+#endif
     
     } else {
     for ( i=0; i<n; i++ ) {
@@ -293,6 +308,15 @@ void re_setup_PRECISION( level_struct *l, struct Thread *threading ) {
       START_LOCKED_MASTER(threading)
       coarse_operator_PRECISION_setup( l->is_PRECISION.interpolation, l );
 #endif
+#ifdef HAVE_TM
+    l->next_level->tm_shift = g.tm_mu*g.tm_mu_factor[l->next_level->depth];
+    l->next_level->tm_even_shift = g.tm_mu_even_shift*g.tm_mu_factor[l->next_level->depth];
+    l->next_level->tm_odd_shift = g.tm_mu_odd_shift*g.tm_mu_factor[l->next_level->depth];
+
+    if( g.tm_mu_factor[l->next_level->depth]!=g.tm_mu_factor[l->depth] )
+      tm_term_PRECISION_setup( l->next_level->op_PRECISION.tm_term, l->next_level->op_PRECISION.odd_proj,
+			       l->next_level, no_threading );
+#endif
       conf_PRECISION_gather( &(l->next_level->s_PRECISION.op), &(l->next_level->op_PRECISION), l->next_level );
       END_LOCKED_MASTER(threading)
       if ( !l->next_level->idle && l->next_level->level > 0 ) {
@@ -336,7 +360,9 @@ void inv_iter_2lvl_extension_setup_PRECISION( int setup_iter, level_struct *l, s
       int pc = 0, pi = 1, pn = l->num_eig_vect*l->post_smooth_iter;
       START_MASTER(threading)
       printf0("depth: %d, 2lvl correction step number %d...\n", l->depth, k+1 ); 
+#ifdef DEBUG
       printf0("\033[0;42m\033[1;37m|"); fflush(0);
+#endif
       END_MASTER(threading)
       for ( int i=0; i<l->num_eig_vect; i++ ) {
         restrict_PRECISION( gmres.b, l->is_PRECISION.test_vector[i], l, threading );
@@ -353,14 +379,18 @@ void inv_iter_2lvl_extension_setup_PRECISION( int setup_iter, level_struct *l, s
                                      1.0/global_norm_PRECISION( buf1, 0, l->inner_vector_size, l, threading ),
                                      threading->start_index[l->depth], threading->end_index[l->depth], l );
         pc += l->post_smooth_iter;
-        START_MASTER(threading)
+#ifdef DEBUG
+	START_MASTER(threading)
         if ( pc >= 0.2*pi*pn ) { printf0("%4d%% |", 20*pi); fflush(0); pi++; }
         END_MASTER(threading)
+#endif
       }
+#ifdef DEBUG
       START_MASTER(threading)
       printf0("\033[0m\n");
       END_MASTER(threading)
-      
+#endif
+
 #ifdef INTERPOLATION_SETUP_LAYOUT_OPTIMIZED_PRECISION
       define_interpolation_PRECISION_operator( l->is_PRECISION.test_vector, l, threading );
       gram_schmidt_on_aggregates_PRECISION_vectorized( l->is_PRECISION.operator, l->num_eig_vect, l, threading );
@@ -452,7 +482,9 @@ void inv_iter_inv_fcycle_PRECISION( int setup_iter, level_struct *l, struct Thre
       
       START_LOCKED_MASTER(threading)
       if ( g.print > 0 ) printf0("depth: %d, bootstrap step number %d...\n", l->depth, j+1 );
+#ifdef DEBUG
       if ( g.print > 0 ) { printf0("\033[0;42m\033[1;37m|"); if ( g.my_rank == 0 ) fflush(0); }
+#endif
       END_LOCKED_MASTER(threading)
       
       gram_schmidt_PRECISION( l->is_PRECISION.test_vector, buffer, 0, l->num_eig_vect, l, threading );
@@ -461,15 +493,18 @@ void inv_iter_inv_fcycle_PRECISION( int setup_iter, level_struct *l, struct Thre
         vcycle_PRECISION( l->p_PRECISION.x, NULL, l->is_PRECISION.test_vector[i], _NO_RES, l, threading );
         test_vector_PRECISION_update( i, l, threading );
         pc += l->post_smooth_iter;
+#ifdef DEBUG
         START_MASTER(threading)
         if ( pc >= (int)((0.2*pi)*pn) ) { if ( g.print > 0 ) { printf0("%4d%% |", 20*pi); if ( g.my_rank == 0 ) fflush(0); } pi++; }
         END_MASTER(threading)
+#endif
       }
 
+#ifdef DEBUG
       START_MASTER(threading)
       if ( g.print > 0 ) printf0("\033[0m\n");
       END_MASTER(threading)
-      
+#endif      
       re_setup_PRECISION( l, threading );
       
       if ( l->depth == 0 && l->next_level->level > 0 ) {

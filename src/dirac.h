@@ -26,9 +26,8 @@ struct Thread;
 
   typedef complex_double ******SU3_storage;
 
-  void dirac_setup( config_double hopp, config_double clover, level_struct *l );
-  double *dirac_setup_get_gauge_pointer();
-  double *dirac_setup_get_clover_pointer();
+  void compute_clover_term ( SU3_storage U, level_struct *l );
+void dirac_setup( config_double hopp, level_struct *l );
   
   void SU3_storage_alloc( SU3_storage *U, level_struct *l );
   void SU3_storage_free( SU3_storage *U, level_struct *l );
@@ -42,8 +41,7 @@ struct Thread;
   void mat_free( complex_double **A, int n );
   void zeroMat( complex_double *A, int n );
   
-  void apply_anti_pbc( SU3_storage U, level_struct *l );
-  void calc_plaq( SU3_storage U, level_struct *l );
+  double calc_plaq( SU3_storage U, level_struct *l );
   
   void Qdiff( complex_double *q_store, int mu, int nu, int t, int z, int y, int x, SU3_storage U );
   void set_clover( complex_double *q_store, int mu, int nu, int index, config_double clover );
@@ -51,6 +49,6 @@ struct Thread;
   void define_odd_even_table( level_struct *l );
   void scale_clover( operator_double_struct *op, double scale_even, double scale_odd, level_struct *l );
   void shift_update( complex_double shift, level_struct *l, struct Thread *threading );
-  void g5D_shift_update( complex_double shift, level_struct *l, struct Thread *threading );
+  void optimized_shift_update( complex_double mass_shift, level_struct *l, struct Thread *threading );
 
 #endif

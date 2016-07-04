@@ -43,14 +43,13 @@ void clover_PRECISION( vector_PRECISION eta, vector_PRECISION phi, config_PRECIS
   }
 }
 
-
 static void spin0and1_clover_PRECISION( vector_PRECISION eta, vector_PRECISION phi, config_PRECISION clover, level_struct *l ) {
   
   vector_PRECISION eta_end = eta + l->inner_vector_size;
   if ( g.csw == 0.0 ) {
     while ( eta < eta_end ) {
       FOR6( *eta = (*phi)*(*clover); eta++; phi++; clover++; )
-      FOR6( *eta = 0; eta++; )
+      FOR6( *eta = _COMPLEX_PRECISION_ZERO; eta++; )
       phi+=6; clover+=6;
     }
   } else {
@@ -68,7 +67,7 @@ static void spin2and3_clover_PRECISION( vector_PRECISION eta, vector_PRECISION p
   if ( g.csw == 0.0 ) {
     while ( eta < eta_end ) {
       phi+=6; clover+=6;
-      FOR6( *eta = 0; eta++; )
+      FOR6( *eta = _COMPLEX_PRECISION_ZERO; eta++; )
       FOR6( *eta = (*phi)*(*clover); eta++; phi++; clover++; )
     }
   } else {
@@ -93,14 +92,13 @@ void block_d_plus_clover_PRECISION( vector_PRECISION eta, vector_PRECISION phi, 
   config_PRECISION D = s->op.D + (start/12)*36;
   
   // clover term
-  if ( g.csw == 0.0 ) {
-    clover_PRECISION( leta, lphi, clover, 12*n, l, threading ); 
-  } else {
-    for ( i=0; i<n; i++ ) {
-      site_clover_PRECISION( leta+12*i, lphi+12*i, clover+42*i );
-    }
-  }
-  
+  clover_PRECISION( leta, lphi, clover, 12*n, l, no_threading ); 
+#ifdef HAVE_TM
+  config_PRECISION tm_term = s->op.tm_term+start;
+  if (g.tm_mu + g.tm_mu_odd_shift != 0.0 || g.tm_mu + g.tm_mu_even_shift != 0.0 )
+    add_diagonal_PRECISION( leta, lphi, tm_term, 12*n );
+#endif
+    
   // inner block couplings
   ind = index[T]; // T direction
   for ( i=0; i<length[T]; i++ ) {
@@ -163,17 +161,19 @@ void d_plus_clover_PRECISION( vector_PRECISION eta, vector_PRECISION phi, operat
   complex_PRECISION pbuf[6];
   vector_PRECISION phi_pt, eta_pt, end_pt;
   config_PRECISION D_pt;
-  
   compute_core_start_end(0, 12*n, &start, &end, l, threading );
-  
+  vector_PRECISION lphi = phi+start, leta = eta+start;
+  config_PRECISION clover = (g.csw==0.0)?op->clover+start:op->clover+(start/12)*42;
+    
   SYNC_MASTER_TO_ALL(threading)
 
-  if ( g.csw == 0.0 ) {
-    vector_PRECISION_scale( eta, phi, op->shift, start, end, l );
-  } else {
-    clover_PRECISION( eta+start, phi+start, op->clover+((start/12)*42), end-start, l, threading );
-  }
-  
+  // clover term
+  clover_PRECISION( leta, lphi, clover, end-start, l, threading ); 
+#ifdef HAVE_TM
+  if (g.tm_mu + g.tm_mu_odd_shift != 0.0 || g.tm_mu + g.tm_mu_even_shift != 0.0 )
+    add_diagonal_PRECISION( leta, lphi, op->tm_term+start, end-start );
+#endif
+    
   START_MASTER(threading)
   PROF_PRECISION_START( _NC ); 
   END_MASTER(threading)
@@ -305,6 +305,17 @@ void g5D_plus_clover_PRECISION( vector_PRECISION eta, vector_PRECISION phi, oper
 }
 
 
+void diagonal_aggregate_PRECISION( vector_PRECISION eta1, vector_PRECISION eta2, vector_PRECISION phi, config_PRECISION diag, level_struct *l ) {
+
+  vector_PRECISION eta_end = eta1 + l->inner_vector_size;
+  
+  while ( eta1 < eta_end ) {
+    FOR6( *eta1 = (*phi)*(*diag); *eta2 = _COMPLEX_PRECISION_ZERO; eta1++; eta2++; phi++; diag++; )
+    FOR6( *eta2 = (*phi)*(*diag); *eta1 = _COMPLEX_PRECISION_ZERO; eta1++; eta2++; phi++; diag++; )
+  }
+}
+
+
 void d_plus_clover_aggregate_PRECISION( vector_PRECISION eta1, vector_PRECISION eta2, vector_PRECISION phi, schwarz_PRECISION_struct *s, level_struct *l ) {
   
   int i, length, index1, index2, *index_dir, *neighbor = s->op.neighbor_table;
@@ -313,12 +324,9 @@ void d_plus_clover_aggregate_PRECISION( vector_PRECISION eta1, vector_PRECISION 
   config_PRECISION D_pt, D = s->op.D;
     
   // add clover term/shift
-  if ( g.csw == 0.0 ) {
-    spinwise_PRECISION_skalarmultiply( eta1, eta2, phi, s->op.shift, 0, l->inner_vector_size, l );
-  } else {
-    spin0and1_clover_PRECISION( eta1, phi, s->op.clover, l );
-    spin2and3_clover_PRECISION( eta2, phi, s->op.clover, l );
-  }
+  spin0and1_clover_PRECISION( eta1, phi, s->op.clover, l );
+  spin2and3_clover_PRECISION( eta2, phi, s->op.clover, l );
+  
   // T dir
   length = l->is_PRECISION.agg_length[T]; index_dir = l->is_PRECISION.agg_index[T];
   for ( i=0; i<length; i++ ) {
@@ -461,43 +469,69 @@ void d_neighbor_aggregate_PRECISION( vector_PRECISION eta1, vector_PRECISION eta
   }
 }
 
-
-void operator_updates_PRECISION( level_struct *l ) {
+void apply_twisted_bc_to_vector_PRECISION( vector_PRECISION eta, vector_PRECISION phi, double *theta, level_struct *l) {
+  int t, z, y, x, i;
+  int *gl=l->global_lattice, sl[4];
+  double phase[4];
+  complex_double twisted_bc;
+  for (i=0; i<4; i++)
+    sl[i] = l->local_lattice[i]*g.my_coords[i];
   
-  if ( !l->idle ) {
-    if ( l->depth == 0 ) {
-      schwarz_PRECISION_setup( &(l->s_PRECISION), &(g.op_double), l );
-      if ( g.method >= 4 ) {
-        oddeven_free_PRECISION( l );
-        oddeven_setup_PRECISION( &(g.op_double), l );
+  for (t=0; t<l->local_lattice[0]; t++) {
+    phase[T] = theta[T]*((double)sl[T]+t)/(double)gl[T];
+    for (z=0; z<l->local_lattice[1]; z++) {
+      phase[Z] = phase[T] + theta[Z]*((double)sl[Z]+z)/(double)gl[Z];
+      for (y=0; y<l->local_lattice[2]; y++) {
+	phase[Y] = phase[Z] + theta[Y]*((double)sl[Y]+y)/(double)gl[Y];
+        for (x=0; x<l->local_lattice[3]; x++) {
+	  phase[X] = phase[Y] + theta[X]*((double)sl[X]+x)/(double)gl[X];
+	  twisted_bc = exp(I*phase[X]);
+	  FOR12( *eta = (*phi)*twisted_bc; phi++; eta++; );
+	}
       }
     }
-    
-    if ( l->level > 0 ) {
-#ifndef INTERPOLATION_SETUP_LAYOUT_OPTIMIZED_PRECISION
-      coarse_operator_PRECISION_setup( l->is_PRECISION.interpolation, l );
+  }
+}
+
+void operator_updates_PRECISION( level_struct *l, struct Thread *threading ) {
+
+  if ( l->level > 0 ) {
+    if ( !l->idle ) {
+#ifdef INTERPOLATION_SETUP_LAYOUT_OPTIMIZED_PRECISION
+      coarse_operator_PRECISION_setup_vectorized( l->is_PRECISION.operator, l, threading );
+      START_LOCKED_MASTER(threading)
 #else
-      coarse_operator_PRECISION_setup_vectorized( l->is_PRECISION.operator, l, no_threading );
+      START_LOCKED_MASTER(threading)
+      coarse_operator_PRECISION_setup( l->is_PRECISION.interpolation, l );
+#endif
+#ifdef HAVE_TM
+      l->next_level->tm_shift = g.tm_mu*g.tm_mu_factor[l->next_level->depth];
+      l->next_level->tm_even_shift = g.tm_mu_even_shift*g.tm_mu_factor[l->next_level->depth];
+      l->next_level->tm_odd_shift = g.tm_mu_odd_shift*g.tm_mu_factor[l->next_level->depth];
+      
+      if( g.tm_mu_factor[l->next_level->depth]!=g.tm_mu_factor[l->depth] )
+	tm_term_PRECISION_setup( l->next_level->op_PRECISION.tm_term, l->next_level->op_PRECISION.odd_proj, l->next_level, no_threading );
 #endif
       conf_PRECISION_gather( &(l->next_level->s_PRECISION.op), &(l->next_level->op_PRECISION), l->next_level );
-    }
-    
-    if ( l->level > 0 && !l->next_level->idle && l->next_level->level > 0 ) {
-      schwarz_PRECISION_boundary_update( &(l->next_level->s_PRECISION), l->next_level );
-      if ( g.method >= 4 && g.odd_even ) {
-        coarse_oddeven_free_PRECISION( l->next_level );
-        coarse_oddeven_setup_PRECISION( &(l->next_level->s_PRECISION.op), _REORDER, l->next_level );
+      END_LOCKED_MASTER(threading)
+      if ( !l->next_level->idle && l->next_level->level > 0 ) {
+        START_LOCKED_MASTER(threading)
+        schwarz_PRECISION_boundary_update( &(l->next_level->s_PRECISION), l->next_level );
+        END_LOCKED_MASTER(threading)
+        if ( g.method >= 4 && g.odd_even ) {
+          coarse_oddeven_re_setup_PRECISION( &(l->next_level->s_PRECISION.op), _REORDER, l->next_level, threading );
+        } else {
+          coarse_operator_PRECISION_set_couplings( &(l->next_level->s_PRECISION.op), l->next_level, threading );
+        }
       }
+      if ( !l->next_level->idle && l->next_level->level == 0 && g.odd_even ) {
+        coarse_oddeven_re_setup_PRECISION( &(l->next_level->s_PRECISION.op), _NO_REORDERING, l->next_level, threading );
+      } else if ( !l->next_level->idle && l->next_level->level == 0 ) {
+        coarse_operator_PRECISION_set_couplings( &(l->next_level->s_PRECISION.op), l->next_level, threading );
+      }
+      operator_updates_PRECISION( l->next_level, threading );
     }
-    
-    if (  l->level > 0 && !l->next_level->idle && l->next_level->level == 0 && g.odd_even ) {
-      coarse_oddeven_free_PRECISION( l->next_level );
-      coarse_oddeven_setup_PRECISION( &(l->next_level->s_PRECISION.op), _NO_REORDERING, l->next_level );
-    }
-    
-    if ( l->level > 0 )
-      operator_updates_PRECISION( l->next_level );   
-  }
+  }  
 }
 
 
@@ -544,62 +578,146 @@ void shift_update_PRECISION( operator_PRECISION_struct *op, complex_PRECISION sh
         clover += 1 + SQUARE(k);
       }
     }
-    START_LOCKED_MASTER(threading)
-    op->shift = 4+shift;
-    END_LOCKED_MASTER(threading)
   }
 }
 
-
-void g5D_shift_update_PRECISION( operator_PRECISION_struct *op, complex_PRECISION shift, level_struct *l, struct Thread *threading ) {
-  
-  // no hyperthreading in this function
+void tm_term_PRECISION_setup( config_PRECISION tm_term, config_PRECISION odd_proj, level_struct *l, struct Thread *threading ) {
+   
+#ifdef HAVE_TM
   if(threading->thread != 0)
     return;
 
-  config_PRECISION clover = op->clover;
-  
-  if ( clover != NULL ) {
+  complex_PRECISION shift = I*l->tm_shift;
+  complex_PRECISION even_shift = I*l->tm_even_shift;
+  complex_PRECISION odd_shift = I*l->tm_odd_shift;
+
+  if ( tm_term != NULL ) {
     int i, j;
-    complex_PRECISION old_shift = (complex_PRECISION) g.g5D_shift;
-    complex_PRECISION shift_diff = shift - old_shift;
-    
+    int start, end;
+    compute_core_start_end(0, l->num_inner_lattice_sites, &start, &end, l, threading);
+    int n = end-start;
+    complex_PRECISION tm_shift;
+          
     if ( l->depth == 0 ) {
-      int start = threading->start_site[l->depth];
-      int n     = threading->n_site[l->depth];
-      clover += start*(g.csw?42:12);
+      tm_term += start*12;
+      odd_proj += start*12;
+      
       for ( i=0; i<n; i++ ) {
+	if( cimag(even_shift) == 0. && cimag(odd_shift) == 0. )
+	  tm_shift = shift;
+	else
+	  tm_shift = shift + even_shift + odd_proj[0]*(odd_shift - even_shift);
         for ( j=0; j<6; j++ ) {
-          clover[j] -= shift_diff;
+          tm_term[j] = - tm_shift;
         }
         for ( j=6; j<12; j++ ) {
-          clover[j] += shift_diff;
+          tm_term[j] = tm_shift;
         }
-        // clover term diag also stored as complex, so size is 2*15+2*6 = 42
-        clover += (g.csw?42:12);
+	tm_term += 12;
+	odd_proj += 12;
       }
     } else {
-      int start = threading->start_site[l->depth];
-      int n     = threading->n_site[l->depth];
-      int k = l->num_lattice_site_var/2;
-      int sc_size = (l->num_lattice_site_var/2)*(l->num_lattice_site_var+1);
-      clover += start*sc_size;
-      for ( i=0; i<n; i++ ) {
-        for ( j=0; j<k; j++ ) {
-          if ( j>0 ) clover += j+1; 
-          *clover -= shift_diff;
-        }
-        clover ++;
-        for ( j=0; j<k; j++ ) {
-          if ( j>0 ) clover += j+1;
-          *clover += shift_diff;
-        }
-        clover += 1 + SQUARE(k);
+      int k, m  = l->num_lattice_site_var/2;
+      int tm_size = (l->num_lattice_site_var/2)*(l->num_lattice_site_var/2+1);
+            
+      tm_term += start*tm_size;
+      odd_proj += start*tm_size;
+
+      if( cimag(even_shift) == 0. && cimag(odd_shift) == 0. ) {
+	
+	tm_shift = shift;
+	
+	for ( i=0; i<n; i++ ) {
+	  for ( j=0; j<m; j++ ) {
+	    for ( k=0; k<j; k++ )
+	      tm_term[k] = _COMPLEX_PRECISION_ZERO;
+	    tm_term += j;
+	    *tm_term = -1.* tm_shift;
+	    tm_term++;
+	  }
+	  
+	  for ( j=0; j<m; j++ ) {
+	    for ( k=0; k<j; k++ )
+	      tm_term[k] = _COMPLEX_PRECISION_ZERO;
+	    tm_term += j;
+	    *tm_term = tm_shift;
+	    tm_term++;
+	  }
+	}
+      } else {
+	complex_PRECISION odd_factor = odd_shift - even_shift;
+	tm_shift = shift + even_shift;
+	
+	for ( i=0; i<n; i++ ) {
+	  for ( j=0; j<m; j++ ) {
+	    for ( k=0; k<j; k++ ) 
+	      tm_term[k] = -1.* odd_factor*odd_proj[k] ;
+	    tm_term += j;
+	    odd_proj += j;
+	    *tm_term = -1.* (tm_shift + odd_factor * (*odd_proj));
+	    tm_term++;
+	    odd_proj++;
+	  } 
+        
+	  for ( j=0; j<m; j++ ) {
+	    for ( k=0; k<j; k++ ) 
+	      tm_term[k] = odd_factor*odd_proj[k] ;
+	    tm_term += j;
+	    odd_proj += j;
+	    *tm_term = (tm_shift + odd_factor * (*odd_proj));
+	    tm_term++;
+	    odd_proj++;
+	  } 
+	}
       }
     }
-    
-    SYNC_CORES(threading)
   }
+#endif
 }
 
+void optimized_shift_update_PRECISION( complex_PRECISION mass_shift, level_struct *l, struct Thread *threading ) {
 
+  if ( !l->idle ) {
+
+    if ( mass_shift !=  l->dirac_shift ) {
+      shift_update_PRECISION( &(l->op_PRECISION), mass_shift, l, threading );
+      shift_update_PRECISION( &(l->s_PRECISION.op), mass_shift, l, threading );
+      START_LOCKED_MASTER(threading)
+      l->dirac_shift = mass_shift;
+      l->real_shift = creal(mass_shift);
+      END_LOCKED_MASTER(threading)
+    }
+    
+#ifdef HAVE_TM
+    if ( l->tm_shift != g.tm_mu*g.tm_mu_factor[l->depth] ||
+	 l->tm_even_shift != g.tm_mu_even_shift*g.tm_mu_factor[l->depth] ||
+	 l->tm_odd_shift != g.tm_mu_odd_shift*g.tm_mu_factor[l->depth] ) {
+      START_LOCKED_MASTER(threading)
+      if( g.tm_mu_even_shift == g.tm_mu_odd_shift )
+	  printf0("depth: %d, updating mu to %f \n", (l->depth), cimag(g.tm_mu+g.tm_mu_even_shift));
+      else  
+	printf0("depth: %d, updating mu to %f on even sites and %f on odd sites \n", l->depth, cimag(g.tm_mu+g.tm_mu_even_shift), cimag(g.tm_mu+g.tm_mu_even_shift));
+      
+      l->tm_shift = g.tm_mu*g.tm_mu_factor[l->depth];
+      l->tm_even_shift = g.tm_mu_even_shift*g.tm_mu_factor[l->depth];
+      l->tm_odd_shift = g.tm_mu_odd_shift*g.tm_mu_factor[l->depth];
+      END_LOCKED_MASTER(threading)
+	
+      tm_term_PRECISION_setup( l->op_PRECISION.tm_term, l->op_PRECISION.odd_proj, l, threading ); 
+      tm_term_PRECISION_setup( l->s_PRECISION.op.tm_term, l->s_PRECISION.op.odd_proj, l, threading );
+    }
+#endif
+  
+    SYNC_CORES(threading)
+
+    if ( !l->idle && g.method >= 4 && l->level > 0 && g.odd_even ) 
+      coarse_oddeven_re_setup_PRECISION( &(l->s_PRECISION.op), _REORDER, l, threading );
+    else if ( !l->idle && l->level == 0 && g.odd_even)
+      coarse_oddeven_re_setup_PRECISION( &(l->s_PRECISION.op), _NO_REORDERING, l, threading );
+    else
+      coarse_operator_PRECISION_set_couplings_clover( &(l->s_PRECISION.op), l, threading );
+   
+    if(l->level > 0)
+      optimized_shift_update_PRECISION( mass_shift, l->next_level, threading );
+  }
+}

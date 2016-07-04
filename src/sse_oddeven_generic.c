@@ -109,7 +109,7 @@ void schwarz_PRECISION_oddeven_setup( operator_PRECISION_struct *op, level_struc
   
   PRECISION *clover_pt = op->clover_vectorized, *oe_clover_pt = op->oe_clover_vectorized;
   int mu, i, d0, c0, b0, a0, d1, c1, b1, a1, t, z, y, x, agg_split[4], block_split[4], block_size[4];
-  
+
   if ( g.csw ) {
     for ( mu=0; mu<4; mu++ ) {
       agg_split[mu] = l->local_lattice[mu]/l->coarsening[mu];
@@ -153,8 +153,10 @@ void schwarz_PRECISION_oddeven_setup( operator_PRECISION_struct *op, level_struc
                   }
   } else {
     vector_PRECISION_copy( op->oe_clover, op->clover, 0, l->inner_vector_size, l );
+#ifdef HAVE_TM
+    vector_PRECISION_plus( op->oe_clover, op->oe_clover, op->tm_term, 0, l->inner_vector_size, l );
+#endif
   }
-  op->shift = 4+l->dirac_shift;
 }
 #endif
 

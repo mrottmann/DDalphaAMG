@@ -120,7 +120,7 @@ void fine_level_PRECISION_free( level_struct *l ) {
 
 
 void next_level_PRECISION_setup( level_struct *l ) {
-    
+
   prof_float_init( l->next_level );
   prof_double_init( l->next_level );
   gathering_PRECISION_next_level_init( &(l->next_level->gs_PRECISION), l );  
@@ -162,7 +162,7 @@ void next_level_PRECISION_setup( level_struct *l ) {
 void next_level_PRECISION_free( level_struct *l ) {
   
   coarse_grid_correction_PRECISION_free( l );
-  
+
   if ( !l->idle ) {
     if ( ( l->level == 1 && !l->next_level->idle ) || g.kcycle ) {
       fgmres_PRECISION_struct_free( &(l->next_level->p_PRECISION), l->next_level );
@@ -176,7 +176,7 @@ void next_level_PRECISION_free( level_struct *l ) {
     FREE( l->next_level->vbuf_PRECISION[0], complex_PRECISION, n*l->next_level->vector_size );
     coarsening_index_table_PRECISION_free( &(l->is_PRECISION), l );
   }
-  
+
   gathering_PRECISION_free( &(l->next_level->gs_PRECISION), l->next_level );
 }
 

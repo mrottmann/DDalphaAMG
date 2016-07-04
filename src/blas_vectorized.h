@@ -30,60 +30,24 @@
 // C=A*B+C
 static inline void cgemv(const int N, const OPERATOR_TYPE_float *A, int lda, const float *B, float *C)
 {
-#ifdef __MIC__
-  switch(lda)
-  {
-      case 16: return cgemv_lda16(N, A, B, C);
-      case 32: return cgemv_lda32(N, A, B, C);
-      case 48: return cgemv_lda48(N, A, B, C);
-      case 64: return cgemv_lda64(N, A, B, C);
-      default:
-          fprintf(stderr, "FATAL: cgemv called with invalid leading dimension for A\n");
-  }
-#else
 #ifdef SSE
   sse_cgemv( N, A, lda, B, C );
-#endif
 #endif
 }
 
 // C=-A*B+C
 static inline void cgenmv(const int N, const OPERATOR_TYPE_float *A, int lda, const float *B, float *C)
 {
-#ifdef __MIC__
-  switch(lda)
-  {
-      case 16: return cgenmv_lda16(N, A, B, C);
-      case 32: return cgenmv_lda32(N, A, B, C);
-      case 48: return cgenmv_lda48(N, A, B, C);
-      case 64: return cgenmv_lda64(N, A, B, C);
-      default:
-          fprintf(stderr, "FATAL: cgenmv called with invalid leading dimension for A\n");
-  }
-#else
 #ifdef SSE
   sse_cgenmv( N, A, lda, B, C );
-#endif
 #endif
 }
 
 
 static inline void cgem_inverse(const int N, OPERATOR_TYPE_float *A_inverse, OPERATOR_TYPE_float *A, int lda)
 {
-#ifdef __MIC__
-  switch(lda)
-  {
-      case 16: return cgem_inverse_lda16(N, A_inverse, A);
-      case 32: return cgem_inverse_lda32(N, A_inverse, A);
-      case 48: return cgem_inverse_lda48(N, A_inverse, A);
-      case 64: return cgem_inverse_lda64(N, A_inverse, A);
-      default:
-          fprintf(stderr, "FATAL: cgem_inverse called with invalid leading dimension for A\n");
-  }
-#else
 #ifdef SSE
   sse_cgem_inverse( N, A_inverse, A, lda );
-#endif
 #endif
 }
 

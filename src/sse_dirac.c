@@ -1274,7 +1274,7 @@ void sse_set_clover_float( float *out, complex_double *in ) {
     for ( int j=0; j<6; j++ ) {
       for ( int i=0; i<SIMD_LENGTH_float; i++ ) {
         if ( i+k == j || i+k-6 == j ) {
-          // diagonal entry i+k,i+k
+	  // diagonal entry i+k,i+k
           index = i+k;
           sign = 1.0;
         } else if ( i+k<6 ) {
@@ -1309,21 +1309,36 @@ void sse_set_clover_float( float *out, complex_double *in ) {
   }
 }
 
-
 void sse_clover_double( vector_double eta, vector_double phi, operator_double_struct *op, int start, int end,
                         level_struct *l, struct Thread *threading ) {
   
-  clover_double( eta+start, phi+start, op->clover+((start/12)*42), end-start, l, threading );
-  
+  vector_double lphi = phi+start, leta = eta+start;
+  config_double clover = (g.csw==0.0)?op->clover+start:op->clover+(start/12)*42;
+
+  clover_double( leta, lphi, clover, end-start, l, threading ); 
+#ifdef HAVE_TM
+  add_diagonal_double( leta, lphi, op->tm_term+start, end-start );
+#endif
+
 }
 
 
 void sse_clover_float( vector_float eta, vector_float phi, operator_float_struct *op, int start, int end,
                        level_struct *l, struct Thread *threading ) {
-  
-  float *clov = op->clover_vectorized+start*12;
-  for ( int i=start; i<end; i+=12 ) {
-    sse_site_clover_float( (float*)(eta+i), (float*)(phi+i), clov+12*i );
+
+  if ( g.csw == 0.0 ) {
+    vector_float lphi = phi+start, leta = eta+start;
+    config_float clover = (g.csw==0.0)?op->clover+start:op->clover+(start/12)*42;
+
+    clover_float( leta, lphi, clover, end-start, l, threading ); 
+#ifdef HAVE_TM
+    add_diagonal_float( leta, lphi, op->tm_term+start, end-start );
+#endif
+  } else {
+    float *clov = op->clover_vectorized;
+    for ( int i=start; i<end; i+=12 ) {
+      sse_site_clover_float( (float*)(eta+i), (float*)(phi+i), clov+12*i );
+    }
   }
 }
 
@@ -1343,7 +1358,7 @@ void sse_site_clover_float( float *eta, const float *phi, float *clover ) {
   __m128 out_re;
   __m128 out_im;
   
-  // lines 1--4
+  // lines 1--4; indeces from 0 to 47
   in_re = _mm_set1_ps( phi[0] );
   in_im = _mm_set1_ps( phi[1] );
   clov_re = _mm_load_ps( clover );
@@ -1362,7 +1377,7 @@ void sse_site_clover_float( float *eta, const float *phi, float *clover ) {
   
   sse_complex_interleaved_store( out_re, out_im, eta );
   
-  // lines 5--8 
+  // lines 5--8; indeces from 48 to 95 
   in_re = _mm_setr_ps( phi[0], phi[0], phi[12], phi[12] );
   in_im = _mm_setr_ps( phi[1], phi[1], phi[13], phi[13] );
   clov_re = _mm_load_ps( clover );
@@ -1381,7 +1396,7 @@ void sse_site_clover_float( float *eta, const float *phi, float *clover ) {
   
   sse_complex_interleaved_store( out_re, out_im, eta+8 );
   
-  // lines 9--12
+  // lines 9--12; indeces from 96 to 143
   in_re = _mm_set1_ps( phi[12] );
   in_im = _mm_set1_ps( phi[13] );
   clov_re = _mm_load_ps( clover );
@@ -1441,6 +1456,15 @@ void sse_site_clover_invert_float( float *clover_in, float *clover_out ) {
       }
       clover_out += SIMD_LENGTH_float;
     }
+  }
+}
+
+void sse_add_diagonal_clover_double( double *out, complex_double *diag ) { }
+
+void sse_add_diagonal_clover_float( float *out, complex_double *diag ) {
+  for ( int k=0; k<12; k++ ) {
+    out[ sse_clover_real_index(k,k%6) ] += creal_float( diag[k] );
+    out[ sse_clover_imag_index(k,k%6) ] += cimag_float( diag[k] );
   }
 }
 

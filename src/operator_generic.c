@@ -32,6 +32,10 @@ void operator_PRECISION_init( operator_PRECISION_struct *op ) {
   op->clover = NULL;
   op->oe_clover = NULL;
   op->oe_clover_vectorized = NULL;
+#ifdef HAVE_TM
+  op->odd_proj = NULL;
+  op->tm_term = NULL;
+#endif
   
   for ( int mu=0; mu<4; mu++ )
     op->config_boundary_table[mu] = NULL;
@@ -101,8 +105,21 @@ void operator_PRECISION_alloc( operator_PRECISION_struct *op, const int type, le
   nls = (type==_ORDINARY)?l->num_inner_lattice_sites:2*l->num_lattice_sites-l->num_inner_lattice_sites;
   MALLOC( op->D, complex_PRECISION, coupling_site_size*nls );
   MALLOC( op->clover, complex_PRECISION, clover_site_size*l->num_inner_lattice_sites );
+#ifdef HAVE_TM
+  int tm_site_size;
+  if ( l->depth == 0 )
+    tm_site_size = 12;
+  else
+    tm_site_size = (l->num_lattice_site_var/2*(l->num_lattice_site_var/2+1));
+
+  MALLOC( op->tm_term, complex_PRECISION, tm_site_size*l->num_inner_lattice_sites );
+  MALLOC( op->odd_proj, complex_PRECISION, tm_site_size*l->num_inner_lattice_sites );
+  if ( type == _SCHWARZ && l->depth == 0 && g.odd_even ) //we use LU here
+    MALLOC( op->oe_clover, complex_PRECISION, 72*l->num_inner_lattice_sites );
+#else
   if ( type == _SCHWARZ && l->depth == 0 && g.odd_even )
     MALLOC( op->oe_clover, complex_PRECISION, clover_site_size*l->num_inner_lattice_sites );
+#endif
   MALLOC( op->index_table, int, its );
   MALLOC( op->neighbor_table, int, (l->depth==0?4:5)*l->num_inner_lattice_sites );
   MALLOC( op->backward_neighbor_table, int, (l->depth==0?4:5)*l->num_inner_lattice_sites );
@@ -162,8 +179,21 @@ void operator_PRECISION_free( operator_PRECISION_struct *op, const int type, lev
   int nls = (type==_ORDINARY)?l->num_inner_lattice_sites:2*l->num_lattice_sites-l->num_inner_lattice_sites;
   FREE( op->D, complex_PRECISION, coupling_site_size*nls );
   FREE( op->clover, complex_PRECISION, clover_site_size*l->num_inner_lattice_sites );
+#ifdef HAVE_TM
+  int tm_site_size;
+  if ( l->depth == 0 )
+    tm_site_size = 12;
+  else
+    tm_site_size = (l->num_lattice_site_var/2*(l->num_lattice_site_var/2+1));
+
+  FREE( op->tm_term, complex_PRECISION, tm_site_size*l->num_inner_lattice_sites );
+  FREE( op->odd_proj, complex_PRECISION, tm_site_size*l->num_inner_lattice_sites );
+  if ( type == _SCHWARZ && l->depth == 0 && g.odd_even ) //we use LU here
+    FREE( op->oe_clover, complex_PRECISION, 72*l->num_inner_lattice_sites );
+#else
   if ( type == _SCHWARZ && l->depth == 0 && g.odd_even )
     FREE( op->oe_clover, complex_PRECISION, clover_site_size*l->num_inner_lattice_sites );
+#endif
   FREE( op->index_table, int, its );
   FREE( op->neighbor_table, int, (l->depth==0?4:5)*l->num_inner_lattice_sites );
   FREE( op->backward_neighbor_table, int, (l->depth==0?4:5)*l->num_inner_lattice_sites );
@@ -209,8 +239,6 @@ void operator_PRECISION_define( operator_PRECISION_struct *op, level_struct *l )
     l_st[mu] = ls[mu];
     l_en[mu] = le[mu];
   }
-  
-  op->shift = 4+l->dirac_shift;
   
   // define index table
   // lexicographic inner cuboid and
@@ -280,6 +308,7 @@ void operator_PRECISION_test_routine( operator_PRECISION_struct *op, level_struc
   vector_double_minus( vd4, vd3, vd2, 0, l->inner_vector_size, l );
   diff = global_norm_double( vd4, 0, ivs, l, no_threading )/global_norm_double( vd3, 0, ivs, l, no_threading );
   printf0("depth: 0, correctness of schwarz PRECISION Dirac operator: %le\n", diff );
+  if(diff > g.test) g.test = diff;
   END_LOCKED_MASTER(threading)
 
   if(threading->n_core > 1) {
@@ -295,6 +324,7 @@ void operator_PRECISION_test_routine( operator_PRECISION_struct *op, level_struc
     diff = global_norm_double( vd4, 0, ivs, l, no_threading )/global_norm_double( vd3, 0, ivs, l, no_threading );
 
     printf0("depth: 0, correctness of schwarz PRECISION Dirac operator with threading: %le\n", diff );
+    if(diff > g.test) g.test = diff;
     END_LOCKED_MASTER(threading) 
   }    
 

@@ -33,12 +33,23 @@
   void d_plus_clover_dagger_PRECISION( vector_PRECISION eta, vector_PRECISION phi, operator_PRECISION_struct *op, level_struct *l, struct Thread *threading );
   void g5D_plus_clover_PRECISION( vector_PRECISION eta, vector_PRECISION phi, operator_PRECISION_struct *op, level_struct *l, struct Thread *threading );
   void block_d_plus_clover_PRECISION( vector_PRECISION eta, vector_PRECISION phi, int start, schwarz_PRECISION_struct *s, level_struct *l, struct Thread *threading );
+  void diagonal_aggregate_PRECISION( vector_PRECISION eta1, vector_PRECISION eta2, vector_PRECISION phi, config_PRECISION diag, level_struct *l );
   void d_plus_clover_aggregate_PRECISION( vector_PRECISION eta1, vector_PRECISION eta2, vector_PRECISION phi, schwarz_PRECISION_struct *s, level_struct *l );
   void d_neighbor_aggregate_PRECISION( vector_PRECISION eta1, vector_PRECISION eta2, vector_PRECISION phi, const int mu, schwarz_PRECISION_struct *s, level_struct *l );
-  void operator_updates_PRECISION( level_struct *l );
+  void apply_twisted_bc_to_vector_PRECISION( vector_PRECISION eta, vector_PRECISION phi, double *theta, level_struct *l);
+  void operator_updates_PRECISION( level_struct *l, struct Thread *threading );
   void shift_update_PRECISION( operator_PRECISION_struct *op, complex_PRECISION shift, level_struct *l, struct Thread *threading );
-  void g5D_shift_update_PRECISION( operator_PRECISION_struct *op, complex_PRECISION shift, level_struct *l, struct Thread *threading );
-  
+  void tm_term_PRECISION_setup( config_PRECISION tm_term, config_PRECISION odd_proj, level_struct *l, struct Thread *threading );
+  void optimized_shift_update_PRECISION( complex_PRECISION mass_shift, level_struct *l, struct Thread *threading );
+
+  static inline void add_diagonal_PRECISION( const vector_PRECISION eta, const vector_PRECISION phi,
+				     const config_PRECISION diag, const int length ) {
+    config_PRECISION diag_pt = diag;
+    vector_PRECISION phi_pt = phi, eta_pt = eta, eta_end = eta + length;
+    while ( eta_pt < eta_end ) { 
+      FOR12( *eta_pt += (*phi_pt)*(*diag_pt); eta_pt++; phi_pt++; diag_pt++; )
+    }
+  }
   static inline void zero12_PRECISION( const vector_PRECISION phi ) {
     phi[ 0] = _COMPLEX_PRECISION_ZERO;
     phi[ 1] = _COMPLEX_PRECISION_ZERO;

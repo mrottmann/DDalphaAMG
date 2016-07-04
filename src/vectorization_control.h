@@ -27,8 +27,10 @@
 #define SIMD_LENGTH_float 4
 #define SIMD_LENGTH_double 2
 
+#ifndef HAVE_TM // TODO: make it work for TM
 #define INTERPOLATION_OPERATOR_LAYOUT_OPTIMIZED_float
 #define INTERPOLATION_SETUP_LAYOUT_OPTIMIZED_float
+#endif
 #define VECTORIZE_COARSE_OPERATOR_float
 #define GRAM_SCHMIDT_VECTORIZED_float
 #define OPTIMIZED_NEIGHBOR_COUPLING_float

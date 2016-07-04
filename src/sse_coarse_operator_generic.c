@@ -269,6 +269,13 @@ void coarse_operator_PRECISION_set_couplings( operator_PRECISION_struct *op, lev
       op->clover + start*sc_size,
       op->clover_vectorized + start*offset_v,
       n_per_core, l->num_lattice_site_var/2);
+#ifdef HAVE_TM
+  int tm_size = (l->num_lattice_site_var/2)*(l->num_lattice_site_var/2+1);
+  add_tm_term_to_vectorized_layout_PRECISION(
+      op->tm_term + start*tm_size,
+      op->clover_vectorized + start*offset_v,
+      n_per_core, l->num_lattice_site_var/2);
+#endif
   SYNC_CORES(threading)
   
   // vectorize negative boundary
@@ -285,6 +292,34 @@ void coarse_operator_PRECISION_set_couplings( operator_PRECISION_struct *op, lev
         n_per_core, l->num_lattice_site_var/2);
     SYNC_CORES(threading)
   }
+}
+
+void coarse_operator_PRECISION_set_couplings_clover( operator_PRECISION_struct *op, level_struct *l, struct Thread *threading ) {
+    
+  if(op->D_vectorized == 0) 
+    coarse_operator_PRECISION_set_couplings(op, l, threading);
+  
+  int n = l->num_inner_lattice_sites;
+  int sc_size = (l->num_lattice_site_var/2)*(l->num_lattice_site_var+1);
+  int start, end;
+
+  compute_core_start_end_custom(0, n, &start, &end, l, threading, 1);
+  int n_per_core = end-start;
+  int column_offset = SIMD_LENGTH_PRECISION*((l->num_lattice_site_var+SIMD_LENGTH_PRECISION-1)/SIMD_LENGTH_PRECISION);
+  int offset_v = 2*l->num_lattice_site_var*column_offset;
+
+  copy_coarse_operator_clover_to_vectorized_layout_PRECISION(
+      op->clover + start*sc_size,
+      op->clover_vectorized + start*offset_v,
+      n_per_core, l->num_lattice_site_var/2);
+#ifdef HAVE_TM
+  int tm_size = (l->num_lattice_site_var/2)*(l->num_lattice_site_var/2+1);
+  add_tm_term_to_vectorized_layout_PRECISION( 
+      op->tm_term + start*tm_size,
+      op->clover_vectorized + start*offset_v,
+      n_per_core, l->num_lattice_site_var/2);
+#endif
+
 }
 #endif
 
@@ -638,6 +673,67 @@ void copy_coarse_operator_clover_to_vectorized_layout_PRECISION(config_PRECISION
   }
 }
 
+void add_tm_term_to_vectorized_layout_PRECISION(config_PRECISION tm_term,
+    OPERATOR_TYPE_PRECISION *clover_vectorized, int num_aggregates, int num_eig_vect) {
+#ifdef HAVE_TM
+  int vecs = num_eig_vect;
+  // in vectorized layout clover is stored column wise, but not split into ABCD
+  // each column is padded, such that next column can also start at 64B boundary
+  int column_offset = SIMD_LENGTH_PRECISION*((2*num_eig_vect+SIMD_LENGTH_PRECISION-1)/SIMD_LENGTH_PRECISION);
+  // offset between blocks in clover
+  int offset_to_D = (vecs*vecs+vecs)/2; // upper triangle of A including diagonal
+
+#ifndef STORE_COARSE_OPERATOR_AS_FLOAT16
+  PRECISION *out_tmp = clover_vectorized;
+#else
+  // 2 is for complex
+  PRECISION out_tmp[2*column_offset*2*vecs];
+  for (int i=0; i<2*column_offset*2*vecs; i++)
+    out_tmp=0;
+#endif
+
+  // we zero out the padded area to avoid potential floating-point errors
+  // cloverD_vectorized is
+  // AB
+  // CD
+  // 00
+  // (column wise, size of zeros such that columns length is multiple of 64B)
+
+  // 4 directions
+  for ( int a=0; a<num_aggregates; a++ ) {
+    for(int i=0; i<vecs; i++) {
+      for(int j=0; j<vecs; j++) {
+        // A
+        // primed indices to transpose input when necessary to get lower triangle of output
+        int ip = i;
+        int jp = j;
+        PRECISION sign = 1.0;
+        if(j > i) {
+          ip = j;
+          jp = i;
+          sign = -1.0;
+        }
+        int offset_to_column = (ip*ip+ip)/2; // upper triangle including diagonal
+        out_tmp[(2*i+0)*column_offset + j] += sign*creal(tm_term[offset_to_column+jp]);
+        out_tmp[(2*i+1)*column_offset + j] += cimag(tm_term[offset_to_column+jp]);
+	out_tmp[(2*(i+vecs)+0)*column_offset + j + vecs] += sign*creal(tm_term[offset_to_D + offset_to_column+jp]);
+        out_tmp[(2*(i+vecs)+1)*column_offset + j + vecs] += cimag(tm_term[offset_to_D + offset_to_column+jp]);
+      }
+    }
+
+    tm_term += 2*offset_to_D;
+#ifndef STORE_COARSE_OPERATOR_AS_FLOAT16
+    // out_tmp is an alias for the actual output
+    out_tmp += 2*column_offset*2*vecs;
+#else
+    //TODO
+    error0("STORE_COARSE_OPERATOR_AS_FLOAT16 not implemented for HAVE_TM")
+    convert_PRECISION_to_half(2*column_offset*2*vecs, out_tmp, clover_vectorized);
+    clover_vectorized += 2*column_offset*2*vecs;
+#endif
+  }
+#endif
+}
 
 void coarse_aggregate_self_couplings_PRECISION_vectorized( complex_PRECISION *eta1, complex_PRECISION *eta2, 
                                                            complex_PRECISION *phi, schwarz_PRECISION_struct *s,

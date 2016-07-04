@@ -1,3 +1,7 @@
+Version v1606-sbacchio/master:
+  -Twisted mass fermions operator for Nf=2
+  -Support of different shift on even and odd sites
+  -Personalized version of the library
 
 Version v1606 - first release:
   This is the first release of the DDalphaAMG solver library.

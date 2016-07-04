@@ -1,8 +1,8 @@
 
 The DDalphaAMG solver library is an inverter for Wilson-Clover fermions from lattice QCD.
 
-This is the branch sbacchio/original: it is meant to be a copy of DDalphaAMG/master
-  with small changes.
+This is the branch sbacchio/master: it includes the twisted mass fermions and a personalized
+  version of the library.
 
 INSTALL:
 

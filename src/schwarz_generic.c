@@ -141,14 +141,12 @@ void schwarz_PRECISION_alloc( schwarz_PRECISION_struct *s, level_struct *l ) {
   
   MALLOC( s->block, block_struct, s->num_blocks );
   MALLOC( s->bbuf1, complex_PRECISION, (l->depth==0&&g.odd_even?9:3)*s->block_vector_size );
-#ifndef EXTERNAL_DD
   if ( l->depth == 0 ) {
     MALLOC( s->oe_buf[0], complex_PRECISION, 4*l->inner_vector_size );
     s->oe_buf[1] = s->oe_buf[0] + l->inner_vector_size;
     s->oe_buf[2] = s->oe_buf[1] + l->inner_vector_size;
     s->oe_buf[3] = s->oe_buf[2] + l->inner_vector_size;
   }
-#endif
   s->bbuf2 = s->bbuf1 + s->block_vector_size;
   s->bbuf3 = s->bbuf2 + s->block_vector_size;
   if ( l->depth == 0 && g.odd_even ) {
@@ -190,16 +188,11 @@ void schwarz_PRECISION_alloc( schwarz_PRECISION_struct *s, level_struct *l ) {
   MALLOC( l->sbuf_PRECISION[0], complex_PRECISION, 2*vs );
   l->sbuf_PRECISION[1] = l->sbuf_PRECISION[0] + vs;
 
-#ifdef EXTERNAL_DD
-  if ( l->depth > 0 )
-#endif
-  {
-    // these buffers are introduced to make local_minres_PRECISION thread-safe
-    MALLOC( s->local_minres_buffer[0], complex_PRECISION, l->schwarz_vector_size );
-    MALLOC( s->local_minres_buffer[1], complex_PRECISION, l->schwarz_vector_size );
-    MALLOC( s->local_minres_buffer[2], complex_PRECISION, l->schwarz_vector_size );
-  }
-
+  // these buffers are introduced to make local_minres_PRECISION thread-safe
+  MALLOC( s->local_minres_buffer[0], complex_PRECISION, l->schwarz_vector_size );
+  MALLOC( s->local_minres_buffer[1], complex_PRECISION, l->schwarz_vector_size );
+  MALLOC( s->local_minres_buffer[2], complex_PRECISION, l->schwarz_vector_size );
+  
 #ifdef OPTIMIZED_NEIGHBOR_COUPLING_PRECISION
   if ( l->depth == 0 ) {
     MALLOC_HUGEPAGES( s->op.D_vectorized, PRECISION, 2*4*(2*l->vector_size-l->inner_vector_size), 4*SIMD_LENGTH_PRECISION );
@@ -260,7 +253,6 @@ void schwarz_PRECISION_free( schwarz_PRECISION_struct *s, level_struct *l ) {
   
   FREE( s->block, block_struct, s->num_blocks );
   FREE( s->bbuf1, complex_PRECISION, (l->depth==0&&g.odd_even?9:3)*s->block_vector_size );
-#ifndef EXTERNAL_DD
   if ( l->depth == 0 ) {
     s->oe_buf[1] = NULL;
     s->oe_buf[2] = NULL;
@@ -268,7 +260,6 @@ void schwarz_PRECISION_free( schwarz_PRECISION_struct *s, level_struct *l ) {
     FREE( s->oe_buf[0], complex_PRECISION, 4*l->inner_vector_size );
     s->oe_buf[0] = NULL;
   }
-#endif
   s->bbuf2 = NULL; s->bbuf3 = NULL; s->oe_bbuf[0] = NULL; s->oe_bbuf[1] = NULL;
   s->oe_bbuf[2] = NULL; s->oe_bbuf[3] = NULL; s->oe_bbuf[4] = NULL; s->oe_bbuf[5] = NULL;
   
@@ -284,17 +275,13 @@ void schwarz_PRECISION_free( schwarz_PRECISION_struct *s, level_struct *l ) {
   FREE( l->sbuf_PRECISION[0], complex_PRECISION, 2*vs );
   l->sbuf_PRECISION[1] = NULL;
 
-#ifdef EXTERNAL_DD
-  if ( l->depth > 0 )
-#endif
-  {
-    FREE( s->local_minres_buffer[0], complex_PRECISION, l->schwarz_vector_size );
-    FREE( s->local_minres_buffer[1], complex_PRECISION, l->schwarz_vector_size );
-    FREE( s->local_minres_buffer[2], complex_PRECISION, l->schwarz_vector_size );
-    s->local_minres_buffer[0] = NULL;
-    s->local_minres_buffer[1] = NULL;
-    s->local_minres_buffer[2] = NULL;
-  }
+  FREE( s->local_minres_buffer[0], complex_PRECISION, l->schwarz_vector_size );
+  FREE( s->local_minres_buffer[1], complex_PRECISION, l->schwarz_vector_size );
+  FREE( s->local_minres_buffer[2], complex_PRECISION, l->schwarz_vector_size );
+  s->local_minres_buffer[0] = NULL;
+  s->local_minres_buffer[1] = NULL;
+  s->local_minres_buffer[2] = NULL;
+  
 #ifdef OPTIMIZED_NEIGHBOR_COUPLING_PRECISION
   if ( l->depth == 0 ) {
     FREE_HUGEPAGES( s->op.D_vectorized, PRECISION, 2*4*(2*l->vector_size-l->inner_vector_size) );
@@ -1045,7 +1032,6 @@ void schwarz_PRECISION_setup( schwarz_PRECISION_struct *s, operator_double_struc
   int i, index, n = l->num_inner_lattice_sites, *tt = s->op.translation_table;
   config_PRECISION D_out_pt, clover_out_pt;
   config_double D_in_pt = op_in->D, clover_in_pt = op_in->clover;
-  s->op.shift = op_in->shift;
   
   for ( i=0; i<n; i++ ) {
     index = tt[i];
@@ -1066,6 +1052,22 @@ void schwarz_PRECISION_setup( schwarz_PRECISION_struct *s, operator_double_struc
       FOR12( *clover_out_pt = (complex_PRECISION) *clover_in_pt; clover_out_pt++; clover_in_pt++; )
     }
   }
+
+#ifdef HAVE_TM
+  config_PRECISION tm_term_out_pt, odd_proj_out_pt;
+  config_double tm_term_in_pt = op_in->tm_term, odd_proj_in_pt = op_in->odd_proj;
+  for ( i=0; i<n; i++ ) {
+    index = tt[i];
+    tm_term_out_pt = s->op.tm_term + 12*index;
+    FOR12( *tm_term_out_pt = (complex_PRECISION) *tm_term_in_pt; tm_term_out_pt++; tm_term_in_pt++; )
+  }
+
+  for ( i=0; i<n; i++ ) {
+    index = tt[i];
+    odd_proj_out_pt = s->op.odd_proj + 12*index;
+    FOR12( *odd_proj_out_pt = (complex_PRECISION) *odd_proj_in_pt; odd_proj_out_pt++; odd_proj_in_pt++; )
+  }
+#endif  
   
   if ( g.odd_even )
     schwarz_PRECISION_oddeven_setup( &(s->op), l );
@@ -1436,7 +1438,7 @@ void schwarz_PRECISION( vector_PRECISION phi, vector_PRECISION D_phi, vector_PRE
   
   START_NO_HYPERTHREADS(threading)
 
-  int color, k, mu, i,  nb = s->num_blocks, init_res = res;
+  int color, k, mu, i, nb = s->num_blocks, init_res = res;
   vector_PRECISION r = s->buf1;
   vector_PRECISION Dphi = s->buf4;
   vector_PRECISION latest_iter = s->buf2;
@@ -1893,7 +1895,8 @@ void schwarz_PRECISION_mvm_testfun( schwarz_PRECISION_struct *s, level_struct *l
   norm = global_norm_PRECISION( v3, 0, l->inner_vector_size, l, no_threading )/global_norm_PRECISION( v2, 0, l->inner_vector_size, l, no_threading );
   
   printf0("depth: %d, correctness of local residual vector: %le\n", l->depth, norm );
-  
+  if(norm > g.test) g.test = norm;
+    
   FREE( v1, complex_PRECISION, l->schwarz_vector_size );
   FREE( v2, complex_PRECISION, l->vector_size );
   FREE( v3, complex_PRECISION, l->vector_size );

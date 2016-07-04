@@ -1,5 +1,5 @@
 # --- COMPILER ----------------------------------------
-CC = mpicc
+CC = mpiicc 
 CPP = cpp
 MAKEDEP = $(CPP) -MM
 
@@ -9,10 +9,12 @@ BUILDDIR = build
 BINDIR=bin
 LIBDIR=lib
 INCDIR=include
+TSTDIR=tests
 DOCDIR=doc
 GSRCDIR = $(BUILDDIR)/gsrc
 SRC = $(patsubst $(SRCDIR)/%,%,$(filter-out %_generic.c,$(wildcard $(SRCDIR)/*.c)))
-LIB =  $(LIBDIR)/libDDalphaAMG.a $(INCDIR)/DDalphaAMG.h $(INCDIR)/lime_io.h
+TSTS = $(patsubst %.c,%,$(wildcard $(TSTDIR)/*.c))
+LIB =  $(LIBDIR)/libDDalphaAMG.a $(LIBDIR)/libDDalphaAMG_devel.a $(INCDIR)/DDalphaAMG.h
 SRCGEN = $(patsubst $(SRCDIR)/%,%,$(wildcard $(SRCDIR)/*_generic.c))
 GSRCFLT = $(patsubst %_generic.c,$(GSRCDIR)/%_float.c,$(SRCGEN))
 GSRCDBL = $(patsubst %_generic.c,$(GSRCDIR)/%_double.c,$(SRCGEN))
@@ -29,7 +31,7 @@ DEP = $(patsubst %.c,%.dep,$(GSRC))
 # --- CFLAGS -----------------------------------------
 CFLAGS_gnu = -std=gnu99 -Wall -pedantic -fopenmp -O3 -ffast-math -msse4.2
 CFLAGS_intel = -std=gnu99 -Wall -pedantic -qopenmp -O3  -xHOST
-CFLAGS = $(CFLAGS_gnu)
+CFLAGS = $(CFLAGS_intel)
 
 # --- FLAGS FOR HDF5 ---------------------------------
 # H5FLAGS=-DHAVE_HDF5 /usr/include
@@ -47,9 +49,10 @@ OPT_VERSION_FLAGS = $(CFLAGS) $(LIMEFLAGS) $(H5FLAGS) -DOPENMP -DSSE -DPARAMOUTP
 DEVEL_VERSION_FLAGS = $(CFLAGS) $(LIMEFLAGS) -DOPENMP -DSSE -DDEBUG -DPARAMOUTPUT -DTRACK_RES -DFGMRES_RESTEST -DPROFILING -DCOARSE_RES -DSCHWARZ_RES -DTESTVECTOR_ANALYSIS
 
 
-all: execs library documentation
+all: execs library exec-tests documentation
 execs: $(BINDIR)/DDalphaAMG $(BINDIR)/DDalphaAMG_devel
 library: $(LIB)
+exec-tests: $(TSTS)
 documentation: $(DOCDIR)/user_doc.pdf
 install: copy
 
@@ -73,6 +76,14 @@ $(LIBDIR)/libDDalphaAMG.a: $(OBJ)
 	ar rc $@ $(OBJ)
 	ar d $@ main.o
 	ranlib $@
+
+$(LIBDIR)/libDDalphaAMG_devel.a: $(OBJDB)
+	ar rc $@ $(OBJDB)
+	ar d $@ main.o
+	ranlib $@
+
+$(TSTDIR)/%: $(LIB) $(TSTDIR)/%.c
+	$(CC) $(CFLAGS) -o $@ $@.c -I$(INCDIR) -L$(LIBDIR) -lDDalphaAMG $(LIMELIB) -lm 
 
 $(DOCDIR)/user_doc.pdf: $(DOCDIR)/user_doc.tex $(DOCDIR)/user_doc.bib
 	( cd $(DOCDIR); pdflatex user_doc; bibtex user_doc; pdflatex user_doc; pdflatex user_doc; )
@@ -109,9 +120,9 @@ $(GSRCDIR)/%_double.c: $(SRCDIR)/%_generic.c $(firstword $(MAKEFILE_LIST))
 	$(MAKEDEP) $< | sed 's,\(.*\)\.o[ :]*,$(BUILDDIR)/\1_devel.o $@ : ,g' >> $@
 
 copy: $(BINDIR) $(LIBDIR) $(INCDIR) 
-	cp -r $(BINDIR)/ $(PREFIX)/$(BINDIR)/
-	cp -r $(LIBDIR)/ $(PREFIX)/$(LIBDIR)/
-	cp -r $(INCDIR)/ $(PREFIX)/$(INCDIR)/
+	cp -r $(BINDIR)/ $(PREFIX)
+	cp -r $(LIBDIR)/ $(PREFIX)
+	cp -r $(INCDIR)/ $(PREFIX)
 
 clean:
 	rm -f $(BUILDDIR)/*.o
@@ -123,6 +134,7 @@ cleanall: clean
 	rm -f $(INCDIR)/*
 	rm -f $(SRCDIR)/*~
 	rm -f $(TSTDIR)/*~
+	rm -f $(TSTS)
 	rm -f *~
 
 -include $(DEP)

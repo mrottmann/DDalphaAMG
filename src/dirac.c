@@ -23,6 +23,37 @@
 
 void compute_clover_term ( SU3_storage U, level_struct *l ) {
   int i, j, t, z, y, x, mu, nu;
+
+#ifdef HAVE_TM
+
+  l->tm_shift = g.tm_mu;
+  l->tm_even_shift = g.tm_mu_even_shift;
+  l->tm_odd_shift = g.tm_mu_odd_shift; 
+
+  vector_double_define( g.op_double.odd_proj, _COMPLEX_double_ZERO, 0, l->inner_vector_size, l );
+  vector_double_define( g.op_double.tm_term, I*(l->tm_shift + l->tm_even_shift),
+			0, l->inner_vector_size, l );
+  
+  for ( mu=0; mu<4; mu++ )  
+    g.op_double.oe_offset += (l->local_lattice[mu]*(g.my_coords[mu]/l->comm_offset[mu]))%2;
+  g.op_double.oe_offset = g.op_double.oe_offset%2;
+
+  for ( i=0,t=0; t<l->local_lattice[T]; t++ )
+    for ( z=0; z<l->local_lattice[Z]; z++ )
+      for ( y=0; y<l->local_lattice[Y]; y++ )
+	for ( x=0; x<l->local_lattice[X]; x++ ){
+	  if((t+z+y+x+g.op_double.oe_offset)%2) //odd
+	    for ( j=0; j<12; j++, i++){
+	      g.op_double.odd_proj[i]=1;
+	      g.op_double.tm_term[i]+=I*(l->tm_odd_shift - l->tm_even_shift);
+	    }
+	  else
+	    i+=12;
+	}
+  
+  gamma5_double( g.op_double.tm_term, g.op_double.tm_term, l, no_threading);
+#endif
+
   // generate clover term
   if ( g.csw != 0.0 ) {
     spin_alloc( 4, 4 );
@@ -53,11 +84,11 @@ void compute_clover_term ( SU3_storage U, level_struct *l ) {
     mat_free( &Qstore, 3 );
     spin_free( 4, 4 );
   } else {
-    vector_double_define( g.op_double.clover, g.op_double.shift, 0, l->inner_vector_size, l );
+    vector_double_define( g.op_double.clover, 4+l->dirac_shift, 0, l->inner_vector_size, l );
   }
 }
 
-void dirac_setup( config_double hopp, config_double clover, level_struct *l ) {
+void dirac_setup( config_double hopp, level_struct *l ) {
 
 /*********************************************************************************
 * Sets up the gauge matrices + clover term for the dirac operator and calculates 
@@ -68,69 +99,85 @@ void dirac_setup( config_double hopp, config_double clover, level_struct *l ) {
 
   double t0, t1;
   int i, j, t, z, y, x, mu;
-  SU3_storage U, U2;
-  config_double clov = clover?clover:hopp;
-
+  SU3_storage U;
+  complex_double phase[4];
+  int *gl=l->global_lattice, *ll=l->local_lattice, onb[4];
+  for (i=0; i<4; i++)
+    onb[i] = (g.my_coords[i]==g.process_grid[i]-1)?1:0;
+  
   if ( g.print > 0 ) printf0("%s\n", CLIFFORD_BASIS );
-  if ( g.anti_pbc ) printf0("anti");
-  printf0("periodic boundary conditions in time\n");
+  if ( g.bc == _ANTIPERIODIC ) printf0("antiperiodic in time");
+  else if ( g.bc == _TWISTED ) printf0("twisted (%.2f, %.2f, %.2f, %.2f)", g.twisted_bc[0], 
+				       g.twisted_bc[1], g.twisted_bc[2], g.twisted_bc[3]);
+  else printf0("periodic in time");
+  printf0(" boundary conditions\n");
 
   t0 = MPI_Wtime();
+
   // read and store configuration
-  vector_double_real_scale( g.op_double.D, hopp, 0.5, 0, 4*9*l->num_inner_lattice_sites, l );
 
   SU3_storage_alloc( &U, l );
 
-  i=0;
-  for ( t=1; t<l->local_lattice[T]+1; t++ )
-    for ( z=1; z<l->local_lattice[Z]+1; z++ )
-      for ( y=1; y<l->local_lattice[Y]+1; y++ )
-        for ( x=1; x<l->local_lattice[X]+1; x++ )
-          for ( mu=0; mu<4; mu++ )
-            for (j=0; j<9; j++, i++)
-              U[t][z][y][x][mu][j] = clov[i];
-            
-  if ( clover ) {
-    SU3_storage_alloc( &U2, l );
-    i=0;
-    for ( t=1; t<l->local_lattice[T]+1; t++ )
-      for ( z=1; z<l->local_lattice[Z]+1; z++ )
-        for ( y=1; y<l->local_lattice[Y]+1; y++ )
-          for ( x=1; x<l->local_lattice[X]+1; x++ )
-            for ( mu=0; mu<4; mu++ )
-              for (j=0; j<9; j++, i++)
-                U2[t][z][y][x][mu][j] = hopp[i];
-              
-    SU3_ghost_update( &U2, l );
-    printf0("hopping term ");
-    
-    calc_plaq( U2, l );
-    
-#ifndef HAVE_LIME
-    // The antipbc are not applyed during the conf reading as done in io.c
-    if(g.anti_pbc)
-      apply_anti_pbc( U2, l );
-#endif
-
-    SU3_storage_free( &U2, l );
+  if( g.bc == _ANTIPERIODIC && onb[T] ) {
+    phase[Z] = 1; phase[Y] = 1; phase[X] = 1;
+    for ( t=1, i=0; t<ll[T]+1; t++ ) {
+      if (t<ll[T]) phase[T] = 1; 
+      else phase[T] = -1;
+      for ( z=1; z<ll[Z]+1; z++ )
+	for ( y=1; y<ll[Y]+1; y++ )
+	  for ( x=1; x<ll[X]+1; x++ )
+	    for ( mu=0; mu<4; mu++ )
+	      for (j=0; j<9; j++, i++) {
+		g.op_double.D[i] = 0.5*phase[mu]*hopp[i];
+		U[t][z][y][x][mu][j] = phase[mu]*hopp[i];
+	      }
+    }
+  }
+  else if( g.bc == _TWISTED && ( onb[T] || onb[Z] || onb[Y] || onb[X] )) {
+    warning0("Twisted boundary conditions not fully supported outside the library.");
+    for ( t=1, i=0; t<ll[T]+1; t++ ) {
+      if ( !onb[T] || t<ll[T] || g.twisted_bc[T]==0) phase[T] = 1; 
+      else phase[T] = cexp(I*g.twisted_bc[T]);
+      for ( z=1; z<ll[Z]+1; z++ ) {
+	if ( !onb[Z] || z<ll[Z] || g.twisted_bc[Z]==0) phase[Z] = 1; 
+	else phase[Z] = cexp(I*g.twisted_bc[Z]);
+	for ( y=1; y<ll[Y]+1; y++ ) {
+	  if ( !onb[Y] || y<ll[Y] || g.twisted_bc[Y]==0) phase[Y] = 1; 
+	  else phase[Y] = cexp(-I*g.twisted_bc[Y]);
+	  for ( x=1; x<ll[X]+1; x++ ) {
+	    if ( !onb[X] || x<ll[X] || g.twisted_bc[X]==0) phase[X] = 1; 
+	    else phase[X] = cexp(-I*g.twisted_bc[X]);
+	    for ( mu=0; mu<4; mu++ ) 
+	      for (j=0; j<9; j++, i++) {
+		g.op_double.D[i] = 0.5*phase[mu]*hopp[i];
+		U[t][z][y][x][mu][j] = phase[mu]*hopp[i];
+	      }
+	  }
+	}
+      }
+    }
   }
 
+  else
+    for ( t=1, i=0; t<ll[T]+1; t++ )
+      for ( z=1; z<ll[Z]+1; z++ )
+	for ( y=1; y<ll[Y]+1; y++ )
+	  for ( x=1; x<ll[X]+1; x++ )
+	    for ( mu=0; mu<4; mu++ )
+	      for (j=0; j<9; j++, i++) {
+		g.op_double.D[i] = 0.5*hopp[i];
+		U[t][z][y][x][mu][j] = hopp[i];
+	      }
+  
   SU3_ghost_update( &U, l );
   if ( g.print > 0 ) printf0("Configuration stored...\n");
 
   compute_clover_term( U, l );
   
   // calculate the plaquette
-  if ( clover )
-    printf0("clover term ");
-  calc_plaq( U, l );
-  
-#ifdef HAVE_LIME
-  // The antipbc are not applyed during the conf reading as done in io.c
-  if(g.anti_pbc)
-    apply_anti_pbc( U, l );
-#endif
-  
+  g.plaq_clov = calc_plaq( U, l );
+  if(g.print > 0) printf0("average plaquette: %.13lf\n", g.plaq_clov);
+    
   SU3_storage_free( &U, l );
   
   t1 = MPI_Wtime();
@@ -528,21 +575,9 @@ void SU3_storage_free( SU3_storage *U, level_struct *l ) {
   free((*U));
 }
 
-void apply_anti_pbc( SU3_storage U, level_struct *l ) {
-  int t, z, y, x;
-  if(g.my_coords[0]==(l->global_lattice[T]/l->local_lattice[T]-1)) {
-    t=l->local_lattice[0];
-    for (z=1; z<l->local_lattice[1]+1; z++)
-      for (y=1; y<l->local_lattice[2]+1; y++)
-        for (x=1; x<l->local_lattice[3]+1; x++)
-          scaleMat(U[t][z][y][x][0],U[t][z][y][x][0],-1.0,3);
-  }
-  SU3_ghost_update( &U, l );
-}
-
-void calc_plaq( SU3_storage U, level_struct *l ) {
+double calc_plaq( SU3_storage U, level_struct *l ) {
   
-  int t, z, y, x, mu, nu, ls[4], mH[4][4]  = {{ 1,0,0,0 },{ 0,1,0,0 },{ 0,0,1,0 },{ 0,0,0,1 }};  
+  int t, z, y, x, mu, nu, ls[4], mH[4][4]  = {{ 1,0,0,0 },{ 0,1,0,0 },{ 0,0,1,0 },{ 0,0,0,1 }};
   complex_double plaq, averagePlaq, *su3Prod, *tmp1, *tmp2;
   long int k;
   
@@ -586,14 +621,11 @@ void calc_plaq( SU3_storage U, level_struct *l ) {
   MPI_Allreduce( &plaq, &averagePlaq, 1, MPI_COMPLEX_double, MPI_SUM, g.comm_cart );
   g.plaq = creal(averagePlaq);
   
-#ifndef HAVE_LIME
-  printf0("average plaquette: %.13lf in [0,3]\n", averagePlaq );
-#else
-  printf0("average plaquette: %.13lf in [0,1]\n", averagePlaq );
-#endif
   mat_free( &su3Prod, 3 );
   mat_free( &tmp1, 3 );
   mat_free( &tmp2, 3 );
+
+  return creal(averagePlaq);
 }
 
 
@@ -641,7 +673,6 @@ void scale_clover( operator_double_struct *op, double scale_even, double scale_o
   }
 }
 
-
 void shift_update( complex_double shift, level_struct *l, struct Thread *threading ) {
 
   ASSERT(l->depth == 0);
@@ -650,13 +681,14 @@ void shift_update( complex_double shift, level_struct *l, struct Thread *threadi
   shift_update_double( &(l->s_double.op), shift, l, threading );
   shift_update_float( &(l->s_float.op), shift, l, threading );
 
-  START_LOCKED_MASTER(threading)
   if ( g.mixed_precision )
-    operator_updates_float( l ); 
+    operator_updates_float( l, threading ); 
   else
-    operator_updates_double( l );
+    operator_updates_double( l, threading );
 
-  g.g5D_shift = shift;
+  START_LOCKED_MASTER(threading)
+  l->dirac_shift = shift;
+  l->real_shift = creal(shift);
   END_LOCKED_MASTER(threading)
 
 #ifdef DEBUG
@@ -664,27 +696,97 @@ void shift_update( complex_double shift, level_struct *l, struct Thread *threadi
 #endif
 }
 
-
-void g5D_shift_update( complex_double shift, level_struct *l, struct Thread *threading ) {
+void optimized_shift_update( complex_double mass_shift, level_struct *l, struct Thread *threading ) {
   
-  ASSERT(l->depth == 0);
-  g5D_shift_update_double( &(g.op_double), shift, l, threading );
-  g5D_shift_update_float( &(g.op_float), shift, l, threading );
-  g5D_shift_update_double( &(l->s_double.op), shift, l, threading );
-  g5D_shift_update_float( &(l->s_float.op), shift, l, threading );
+  ASSERT(l->depth==0);
   
-  START_LOCKED_MASTER(threading)
-  if ( g.mixed_precision )
-    operator_updates_float( l ); 
-  else
-    operator_updates_double( l );
+  if ( mass_shift !=  l->dirac_shift ) {
+    shift_update_double( &(g.op_double), mass_shift, l, threading );
+    shift_update_float( &(g.op_float), mass_shift, l, threading );
+    if(l->s_double.op.clover != NULL) 
+      shift_update_double( &(l->s_double.op), mass_shift, l, threading );
+    if ( l->s_float.op.clover != NULL )
+      shift_update_float( &(l->s_float.op), mass_shift, l, threading );
 
-  g.g5D_shift = shift;
+    START_LOCKED_MASTER(threading)
+    l->dirac_shift = mass_shift;
+    l->real_shift = creal(mass_shift);
+    END_LOCKED_MASTER(threading)
+   }
+  
+#ifdef HAVE_TM
+  if ( l->tm_shift != g.tm_mu || l->tm_even_shift != g.tm_mu_even_shift ||
+       l->tm_odd_shift != g.tm_mu_odd_shift ) {
+
+    START_MASTER(threading)
+    if( g.tm_mu_even_shift == g.tm_mu_odd_shift )
+      printf0("depth: %d, updating mu to %f \n", (l->depth), cimag(g.tm_mu+g.tm_mu_even_shift));
+    else  
+      printf0("depth: %d, updating mu to %f on even sites and %f on odd sites \n", l->depth, cimag(g.tm_mu+g.tm_mu_even_shift), cimag(g.tm_mu+g.tm_mu_even_shift));
+  
+    l->tm_shift = g.tm_mu;
+    l->tm_even_shift = g.tm_mu_even_shift;
+    l->tm_odd_shift = g.tm_mu_odd_shift; 
+    END_LOCKED_MASTER(threading)
+    
+    tm_term_double_setup( g.op_double.tm_term, g.op_double.odd_proj, l, threading ); 
+    tm_term_float_setup( g.op_float.tm_term, g.op_float.odd_proj, l, threading );
+    
+    if(l->s_double.op.tm_term != NULL) 
+      tm_term_double_setup( l->s_double.op.tm_term, l->s_double.op.odd_proj, l, threading ); 
+    
+    if ( l->s_float.op.tm_term != NULL )
+      tm_term_float_setup( l->s_float.op.tm_term, l->s_float.op.odd_proj, l, threading );
+  }
+#endif
+    
+  START_LOCKED_MASTER(threading)  
+  if(l->s_double.op.clover != NULL) {
+#ifdef OPTIMIZED_SELF_COUPLING_double
+    if ( g.csw != 0 ) {
+      double *clover_vectorized_pt = l->s_double.op.clover_vectorized;
+      config_double clover_pt = l->s_double.op.clover;
+      config_double tm_term_pt = l->s_double.op.tm_term;
+      for ( int i=0; i<l->num_inner_lattice_sites; i++ ) {
+	sse_set_clover_double( clover_vectorized_pt, clover_pt );
+	sse_add_diagonal_clover_double( clover_vectorized_pt, tm_term_pt );
+	clover_pt += 42;
+	tm_term_pt += 12;
+	clover_vectorized_pt += 144;
+      }
+    }
+#endif
+    if ( g.odd_even )
+      schwarz_double_oddeven_setup( &(l->s_double.op), l );
+  }  
+
+  if ( l->s_float.op.clover != NULL ) {
+#ifdef OPTIMIZED_SELF_COUPLING_float
+    if ( g.csw != 0 ) {
+      config_double clover_pt = g.op_double.clover;
+      config_double tm_term_pt = g.op_double.tm_term;
+      for ( int i=0; i<l->num_inner_lattice_sites; i++ ) {
+	//we have to reorder the term, while in OPTIMIZED_SELF_COUPLING_double we use already reordered terms
+	float *clover_vectorized_pt = l->s_float.op.clover_vectorized + 144*l->s_float.op.translation_table[i];
+	sse_set_clover_float( clover_vectorized_pt, clover_pt );
+	sse_add_diagonal_clover_float( clover_vectorized_pt, tm_term_pt );
+	clover_pt += 42;
+	tm_term_pt += 12;
+      }
+    }
+#endif
+    if ( g.odd_even )
+      schwarz_float_oddeven_setup( &(l->s_float.op), l );
+  }  
   END_LOCKED_MASTER(threading)
 
+  if ( g.mixed_precision ) 
+    optimized_shift_update_float( mass_shift, l->next_level, threading );
+  else 
+    optimized_shift_update_double( mass_shift, l->next_level, threading );
+
 #ifdef DEBUG
-  test_routine( l, threading );
+  if ( l->depth == 0 )
+    test_routine( l, threading );
 #endif
-
 }
-

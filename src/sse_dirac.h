@@ -69,10 +69,14 @@ void sse_set_clover_double( double *out, complex_double *in );
 void sse_set_clover_float( float *out, complex_double *in );
 void sse_site_clover_double( double *eta, const double *phi, const double *clover );
 void sse_site_clover_float( float *eta, const float *phi, float *clover );
+void sse_clover_double( vector_double eta, vector_double phi, operator_double_struct *op, int start, int end, level_struct *l, struct Thread *threading );
+void sse_clover_float( vector_float eta, vector_float phi, operator_float_struct *op, int start, int end, level_struct *l, struct Thread *threading );
 
 void sse_site_clover_invert_double( double *clover_in, double *clover_out );
 void sse_site_clover_invert_float( float *clover_in, float *clover_out );
 
+void sse_add_diagonal_clover_double( double *out, complex_double *diag );
+void sse_add_diagonal_clover_float( float *out, complex_double *diag );
 
 static inline void sse_mvm_double_simd_length( const complex_double *eta, const complex_double *D, const complex_double *phi ) {}
 
@@ -540,6 +544,7 @@ static inline void sse_spin2and3_site_clover_float( const complex_float *eta, co
   }
 #endif
 }
+
 
 #endif
 #endif // DIRAC_SSE_H

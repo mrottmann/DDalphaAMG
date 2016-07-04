@@ -39,6 +39,7 @@ void block_PRECISION_boundary_op( vector_PRECISION eta, vector_PRECISION phi, in
 }
 #endif
 
+
 #ifdef OPTIMIZED_NEIGHBOR_COUPLING_PRECISION
 void n_block_PRECISION_boundary_op( vector_PRECISION eta, vector_PRECISION phi, int k,
                                     schwarz_PRECISION_struct *s, level_struct *l ) {
@@ -129,7 +130,10 @@ void schwarz_PRECISION_setup( schwarz_PRECISION_struct *s, operator_double_struc
   int i, index, n = l->num_inner_lattice_sites, *tt = s->op.translation_table;
   config_PRECISION D_out_pt, clover_out_pt;
   config_double D_in_pt = op_in->D, clover_in_pt = op_in->clover;
-  s->op.shift = op_in->shift;
+#ifdef HAVE_TM
+  config_PRECISION tm_term_out_pt, odd_proj_out_pt;
+  config_double tm_term_in_pt = op_in->tm_term, odd_proj_in_pt = op_in->odd_proj;
+#endif
   
   for ( i=0; i<n; i++ ) {
     index = tt[i];
@@ -166,6 +170,26 @@ void schwarz_PRECISION_setup( schwarz_PRECISION_struct *s, operator_double_struc
     }
   }
   
+#ifdef HAVE_TM
+  for ( i=0; i<n; i++ ) {
+    index = tt[i];
+    tm_term_out_pt = s->op.tm_term + 12*index;
+#ifdef OPTIMIZED_SELF_COUPLING_PRECISION
+    if ( g.csw != 0 ) {
+      PRECISION *clover_out_vectorized_pt = s->op.clover_vectorized + 144*index;
+      sse_add_diagonal_clover_PRECISION( clover_out_vectorized_pt, tm_term_in_pt );
+    }
+#endif
+    FOR12( *tm_term_out_pt = (complex_PRECISION) *tm_term_in_pt; tm_term_out_pt++; tm_term_in_pt++; )
+  }
+
+  for ( i=0; i<n; i++ ) {
+    index = tt[i];
+    odd_proj_out_pt = s->op.odd_proj + 12*index;
+    FOR12( *odd_proj_out_pt = (complex_PRECISION) *odd_proj_in_pt; odd_proj_out_pt++; odd_proj_in_pt++; )
+  }
+#endif
+
   if ( g.odd_even )
     schwarz_PRECISION_oddeven_setup( &(s->op), l );
   

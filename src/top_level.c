@@ -123,25 +123,52 @@ void solve( vector_double solution, vector_double source, level_struct *l, struc
 void solve_driver( level_struct *l, struct Thread *threading ) {
   
   vector_double solution = NULL, source = NULL;
+  double minus_twisted_bc[4];
   
-  START_MASTER(threading)
-  MALLOC( solution, complex_double, l->inner_vector_size );
-  MALLOC( source, complex_double, l->inner_vector_size );
-  // use threading->workspace to distribute pointer to newly allocated memory to all threads
-  ((vector_double *)threading->workspace)[0] = solution;
-  ((vector_double *)threading->workspace)[1] = source;
-  END_MASTER(threading)
-  SYNC_MASTER_TO_ALL(threading)
-  solution = ((vector_double *)threading->workspace)[0];
-  source   = ((vector_double *)threading->workspace)[1];
+  START_LOCKED_MASTER(threading)
+  if(g.bc==2)
+    for ( int i=0; i<4; i++ )
+      minus_twisted_bc[i] = g.twisted_bc[i];
+  END_LOCKED_MASTER(threading)
+  
+  PUBLIC_MALLOC( solution, complex_double, l->inner_vector_size );
+  PUBLIC_MALLOC( source, complex_double, l->inner_vector_size );
   
   rhs_define( source, l, threading );
-  
+
+  if(g.bc==2)
+    apply_twisted_bc_to_vector_double( source, source, g.twisted_bc, l);
+
+#ifdef HAVE_TM
+  if (g.tm_mu + g.tm_mu_odd_shift != 0.0 || g.tm_mu + g.tm_mu_even_shift != 0.0 )
+    if(g.downprop) {
+      
+      START_MASTER(threading)  
+      printf0("\n\n+--------------------------- up ---------------------------+\n\n");
+      END_MASTER(threading)
+
+      solve( solution, source, l, threading );    
+      
+      if(g.bc==2)
+	apply_twisted_bc_to_vector_double( solution, solution, minus_twisted_bc, l);
+      
+      START_LOCKED_MASTER(threading)  
+      printf0("\n\n+-------------------------- down --------------------------+\n\n");
+      g.tm_mu*=-1;
+      g.tm_mu_odd_shift*=-1;
+      g.tm_mu_even_shift*=-1;
+      END_LOCKED_MASTER(threading)
+	
+      optimized_shift_update( l->dirac_shift, l, threading );
+    } 
+#endif
+
   solve( solution, source, l, threading );
 
-  START_LOCKED_MASTER(threading)
-  FREE( solution, complex_double, l->inner_vector_size );
-  FREE( source, complex_double, l->inner_vector_size );
-  END_LOCKED_MASTER(threading)
+  if(g.bc==2)
+    apply_twisted_bc_to_vector_double( solution, solution, minus_twisted_bc, l);
+  
+  PUBLIC_FREE( solution, complex_double, l->inner_vector_size );
+  PUBLIC_FREE( source, complex_double, l->inner_vector_size );
 }
 

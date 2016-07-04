@@ -44,7 +44,9 @@
       OPERATOR_TYPE_PRECISION *D_vectorized, int num_aggregates, int num_eig_vect);
   void copy_coarse_operator_clover_to_vectorized_layout_PRECISION(config_PRECISION clover,
       OPERATOR_TYPE_PRECISION *clover_vectorized, int num_aggregates, int num_eig_vect);
-  
+  void add_tm_term_to_vectorized_layout_PRECISION(config_PRECISION tm_term,
+      OPERATOR_TYPE_PRECISION *clover_vectorized, int num_aggregates, int num_eig_vect);
+    
   void coarse_spinwise_site_self_couplings_PRECISION_vectorized(
       complex_PRECISION *eta1, complex_PRECISION *eta2,
       complex_PRECISION *phi, config_PRECISION clover, int elements, level_struct *l );

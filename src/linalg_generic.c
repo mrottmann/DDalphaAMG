@@ -103,7 +103,7 @@ complex_PRECISION process_inner_product_PRECISION( vector_PRECISION phi, vector_
 }
 
 
-#if !defined( OPTIMIZED_LINALG_PRECISION ) && !defined( __MIC__ )
+#if !defined( OPTIMIZED_LINALG_PRECISION ) 
 void process_multi_inner_product_PRECISION( int count, complex_PRECISION *results, vector_PRECISION *phi, vector_PRECISION psi,
     int start, int end, level_struct *l, struct Thread *threading ) {
 
@@ -352,6 +352,81 @@ void vector_PRECISION_multi_saxpy( vector_PRECISION z, vector_PRECISION *V, comp
   PROF_PRECISION_STOP( _LA8, (PRECISION)(count) );
 }
 #endif
+
+void vector_PRECISION_set_even_to_zero( vector_PRECISION eta, vector_PRECISION phi, level_struct *l, struct Thread *threading ) {
+  
+  int i = threading->start_site[l->depth];
+  vector_PRECISION eta_end = eta + threading->end_index[l->depth];
+  eta += threading->start_index[l->depth];
+  phi += threading->start_index[l->depth];
+
+  while ( eta < eta_end ) {
+    if(g.odd_even_table[i]==_ODD){
+      FOR12( *eta = (*phi); phi++; eta++; )
+	}
+    else if(g.odd_even_table[i]==_EVEN){
+      FOR12( *eta = 0; phi++; eta++; )
+	}
+    i++;
+  }
+}
+
+void vector_PRECISION_gamma5_set_even_to_zero( vector_PRECISION eta, vector_PRECISION phi, level_struct *l, struct Thread *threading ) {
+  
+  int i = threading->start_site[l->depth];
+  vector_PRECISION eta_end = eta + threading->end_index[l->depth];
+  eta += threading->start_index[l->depth];
+  phi += threading->start_index[l->depth];
+
+  while ( eta < eta_end ) {
+    if(g.odd_even_table[i]==_ODD){
+      FOR6( *eta = -(*phi); phi++; eta++; )
+      FOR6( *eta = (*phi); phi++; eta++; )
+	}
+    else if(g.odd_even_table[i]==_EVEN){
+      FOR12( *eta = 0; phi++; eta++; )
+	}
+    i++;
+  }
+}
+
+
+void vector_PRECISION_set_odd_to_zero( vector_PRECISION eta, vector_PRECISION phi, level_struct *l, struct Thread *threading ) {
+   
+  int i = threading->start_site[l->depth];
+  vector_PRECISION eta_end = eta + threading->end_index[l->depth];
+  eta += threading->start_index[l->depth];
+  phi += threading->start_index[l->depth];
+
+  while ( eta < eta_end ) {
+    if(g.odd_even_table[i]==_EVEN){
+      FOR12( *eta = (*phi); phi++; eta++; )
+	}
+    else if(g.odd_even_table[i]==_ODD){
+      FOR12( *eta = 0; phi++; eta++; )
+	}
+    i++;
+  }
+}
+
+void vector_PRECISION_gamma5_set_odd_to_zero( vector_PRECISION eta, vector_PRECISION phi, level_struct *l, struct Thread *threading ) {
+  
+  int i = threading->start_site[l->depth];
+  vector_PRECISION eta_end = eta + threading->end_index[l->depth];
+  eta += threading->start_index[l->depth];
+  phi += threading->start_index[l->depth];
+
+  while ( eta < eta_end ) {
+    if(g.odd_even_table[i]==_EVEN){
+      FOR6( *eta = -(*phi); phi++; eta++; )
+      FOR6( *eta = (*phi); phi++; eta++; )
+	}
+    else if(g.odd_even_table[i]==_ODD){
+      FOR12( *eta = 0; phi++; eta++; )
+	}
+    i++;
+  }
+}
 
 void vector_PRECISION_projection( vector_PRECISION z, vector_PRECISION v, int k, vector_PRECISION *W, complex_PRECISION *diag, 
                                   int orthogonal, level_struct *l, Thread *threading ) {

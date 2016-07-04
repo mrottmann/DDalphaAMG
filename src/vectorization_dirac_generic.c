@@ -40,8 +40,8 @@ void d_plus_clover_aggregate_PRECISION_vectorized( complex_PRECISION *eta1, comp
   config_PRECISION D = s->op.D;
 
   // add clover term/shift
-  spin0and1_site_clover_PRECISION_vectorized( eta1, phi+site_offset*site, s->op.clover+42*site, s->op.shift, offset );
-  spin2and3_site_clover_PRECISION_vectorized( eta2, phi+site_offset*site, s->op.clover+42*site, s->op.shift, offset );
+  spin0and1_site_clover_PRECISION_vectorized( eta1, phi+site_offset*site, s->op.clover+42*site, 4+l->dirac_shift, offset );
+  spin2and3_site_clover_PRECISION_vectorized( eta2, phi+site_offset*site, s->op.clover+42*site, 4+l->dirac_shift, offset );
 
   index_out = site;
 
