@@ -239,6 +239,7 @@ void DDalphaAMG_update_parameters( DDalphaAMG_parameters *mg_params, DDalphaAMG_
 #ifdef HAVE_TM
   if( mg_params->mu != g.tm_mu || mg_params->mu_odd_shift != g.tm_mu_odd_shift || 
                                   mg_params->mu_even_shift != g.tm_mu_even_shift){
+    g.setup_tm_mu = mg_params->mu;
     g.tm_mu = mg_params->mu;
     g.tm_mu_even_shift = mg_params->mu_even_shift;
     g.tm_mu_odd_shift = mg_params->mu_odd_shift;
