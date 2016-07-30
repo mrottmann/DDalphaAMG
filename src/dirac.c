@@ -101,7 +101,7 @@ void dirac_setup( config_double hopp, level_struct *l ) {
   int i, j, t, z, y, x, mu;
   SU3_storage U;
   complex_double phase[4];
-  int *gl=l->global_lattice, *ll=l->local_lattice, onb[4];
+  int *ll=l->local_lattice, onb[4];
   for (i=0; i<4; i++)
     onb[i] = (g.my_coords[i]==g.process_grid[i]-1)?1:0;
   

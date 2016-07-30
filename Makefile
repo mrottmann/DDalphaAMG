@@ -1,9 +1,14 @@
 # --- COMPILER ----------------------------------------
 CC = mpiicc 
-CPP = cpp
-MAKEDEP = $(CPP) -MM
+
+# --- CFLAGS -----------------------------------------
+CFLAGS_gnu = -std=gnu99 -Wall -pedantic -fopenmp -O3 -ffast-math -msse4.2
+CFLAGS_intel = -std=gnu99 -Wall -pedantic -qopenmp -O3  -xHOST
+CFLAGS = $(CFLAGS_intel)
 
 # --- DO NOT CHANGE -----------------------------------
+CPP = cpp
+MAKEDEP = $(CPP) -MM
 SRCDIR = src
 BUILDDIR = build
 BINDIR=bin
@@ -27,11 +32,6 @@ GHEA = $(patsubst %,$(GSRCDIR)/%,$(HEA)) $(GHEAFLT) $(GHEADBL)
 OBJ = $(patsubst $(GSRCDIR)/%.c,$(BUILDDIR)/%.o,$(GSRC))
 OBJDB = $(patsubst %.o,%_devel.o,$(OBJ))
 DEP = $(patsubst %.c,%.dep,$(GSRC))
-
-# --- CFLAGS -----------------------------------------
-CFLAGS_gnu = -std=gnu99 -Wall -pedantic -fopenmp -O3 -ffast-math -msse4.2
-CFLAGS_intel = -std=gnu99 -Wall -pedantic -qopenmp -O3  -xHOST
-CFLAGS = $(CFLAGS_intel)
 
 # --- FLAGS FOR HDF5 ---------------------------------
 # H5FLAGS=-DHAVE_HDF5 /usr/include

@@ -650,12 +650,11 @@ void parameter_update( level_struct *l ) {
 void read_global_info( FILE *in ) {
 
   void *save_pt;
-  int match;
-  
+    
   // Note: There is actually no default set for the three following values
   // Though, when using the code as a library, no configuration paths are required.
   save_pt = &(g.in); g.in[0] = '\0';
-  match = read_parameter( &save_pt, "configuration:", "%s", 1, in, _NO_DEFAULT_SET );
+  read_parameter( &save_pt, "configuration:", "%s", 1, in, _NO_DEFAULT_SET );
   
   save_pt = &(g.in_format); g.in_format = _STANDARD;
   read_parameter( &save_pt, "format:", "%d", 1, in, _DEFAULT_SET );
@@ -959,9 +958,9 @@ void read_solver_parameters( FILE *in, level_struct *l ) {
   
   save_pt = &(g.method); g.method = 2;
   read_parameter( &save_pt, "method:", "%d", 1, in, _DEFAULT_SET );
-  save_pt = &(g.restart); g.restart = 10;
+  save_pt = &(g.restart); g.restart = 30;
   read_parameter( &save_pt, "iterations between restarts:", "%d", 1, in, _DEFAULT_SET );
-  save_pt = &(g.max_restart); g.max_restart = 100;
+  save_pt = &(g.max_restart); g.max_restart = 20;
   read_parameter( &save_pt, "maximum of restarts:", "%d", 1, in, _DEFAULT_SET );
   save_pt = &(g.tol); g.tol = 1E-10;
   read_parameter( &save_pt, "tolerance for relative residual:", "%le", 1, in, _DEFAULT_SET );

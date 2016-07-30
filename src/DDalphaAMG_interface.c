@@ -382,8 +382,8 @@ void DDalphaAMG_set_configuration( double *gauge_field, DDalphaAMG_status *mg_st
   int t, z, y, x, mu, i, j, k;
   double t0, t1;
   SU3_storage U;
-  complex_double phase[4];
-  int *gl=l.global_lattice, *ll=l.local_lattice, onb[4];
+  complex_double phase[4] = { _COMPLEX_double_ZERO, _COMPLEX_double_ZERO, _COMPLEX_double_ZERO, _COMPLEX_double_ZERO};
+  int *ll=l.local_lattice, onb[4];
   for (i=0; i<4; i++)
     onb[i] = (g.my_coords[i]==g.process_grid[i]-1)?1:0;
 
@@ -565,7 +565,7 @@ void DDalphaAMG_driver( double *vector_out, double *vector_in, DDalphaAMG_status
   
   int t, z, y, x, i, j, k, mu, *ll = l.local_lattice, *gl=l.global_lattice, sl[4], precision_changed;
   complex_double twisted_bc, tmp;
-  double phase[4], vmin=1, vmax=EPS_float, vtmp;
+  double phase[4] = {_COMPLEX_double_ZERO, _COMPLEX_double_ZERO, _COMPLEX_double_ZERO, _COMPLEX_double_ZERO}, vmin=1, vmax=EPS_float, vtmp;
   gmres_double_struct *p = g.mixed_precision==2?&(g.p_MP.dp):&(g.p);
   vector_double vb, rhs = p->b;
   vector_double vx, sol = p->x;

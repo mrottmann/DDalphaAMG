@@ -200,7 +200,10 @@ void coarse_grid_correction_PRECISION_free( level_struct *l ) {
 void interpolation_PRECISION_define( vector_double *V, level_struct *l, struct Thread *threading ) {
   
   int k, i, n = l->num_eig_vect,
-      pc = 0, pi = 1, pn = n*6;
+    pc = 0;
+#ifdef DEBUG
+  int pi = 1, pn = n*6;
+#endif
   vector_PRECISION *buffer = NULL;
   int start = threading->start_index[l->depth];
   int end   = threading->end_index[l->depth];
@@ -357,11 +360,14 @@ void inv_iter_2lvl_extension_setup_PRECISION( int setup_iter, level_struct *l, s
     END_LOCKED_MASTER(threading)
     
     for ( int k=0; k<setup_iter; k++ ) {
-      int pc = 0, pi = 1, pn = l->num_eig_vect*l->post_smooth_iter;
+      int pc = 0;
+#ifdef DEBUG
+      int pi = 1, pn = l->num_eig_vect*l->post_smooth_iter;
+#endif
       START_MASTER(threading)
       printf0("depth: %d, 2lvl correction step number %d...\n", l->depth, k+1 ); 
 #ifdef DEBUG
-      printf0("\033[0;42m\033[1;37m|"); fflush(0);
+      printf0("\033[0;42m\033[1;37m|"); fflush(0); 
 #endif
       END_MASTER(threading)
       for ( int i=0; i<l->num_eig_vect; i++ ) {
@@ -478,7 +484,10 @@ void inv_iter_inv_fcycle_PRECISION( int setup_iter, level_struct *l, struct Thre
   
   if ( !l->idle ) {
     for ( int j=0; j<setup_iter; j++ ) {
-      int pc = 0, pi = 1, pn = l->num_eig_vect*l->post_smooth_iter;
+      int pc = 0;
+#ifdef DEBUG
+      int pi = 1, pn = l->num_eig_vect*l->post_smooth_iter;
+#endif
       
       START_LOCKED_MASTER(threading)
       if ( g.print > 0 ) printf0("depth: %d, bootstrap step number %d...\n", l->depth, j+1 );

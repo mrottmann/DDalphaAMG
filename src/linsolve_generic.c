@@ -1047,7 +1047,7 @@ void fgcr_PRECISION( gmres_PRECISION_struct *p, level_struct *l ) {
   for( ol=0; ol<p->num_restart && finish==0; ol++ )  {
   
     if( ol == 0 && p->initial_guess_zero ) {
-      vector_PRECISION_copy( p->r, p->b, 0, l->inner_vector_size, l );
+      vector_PRECISION_copy( p->r, p->b, p->v_start, p->v_end, l );
     } else {
       apply_operator_PRECISION( p->w, p->x, p, l, no_threading ); // compute w = D*x
       vector_PRECISION_minus( p->r, p->b, p->w, p->v_start, p->v_end, l ); // compute r = b - w
