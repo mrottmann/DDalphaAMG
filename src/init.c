@@ -940,7 +940,7 @@ void read_solver_parameters( FILE *in, level_struct *l ) {
   read_parameter( &save_pt, "coarse grid iterations:", "%d", 1, in, _DEFAULT_SET );
   save_pt = &(g.coarse_restart); g.coarse_restart = 40;
   read_parameter( &save_pt, "coarse grid restarts:", "%d", 1, in, _DEFAULT_SET );
-  save_pt = &(g.coarse_tol); g.coarse_tol = 5E-2;
+  save_pt = &(g.coarse_tol); g.coarse_tol = 1E-1;
   read_parameter( &save_pt, "coarse grid tolerance:", "%le", 1, in, _DEFAULT_SET );
   save_pt = &(g.odd_even); g.odd_even = 1;
   read_parameter( &save_pt, "odd even preconditioning:", "%d", 1, in, _DEFAULT_SET );
