@@ -884,7 +884,7 @@ void read_geometry_data( FILE *in, int ls ) {
             
             
     sprintf( inputstr, "d%d post smooth iter:", i );
-    save_pt = &(g.post_smooth_iter[i]); g.post_smooth_iter[i] = 2;
+    save_pt = &(g.post_smooth_iter[i]); g.post_smooth_iter[i] = 4;
     read_parameter( &save_pt, inputstr, "%d", 1, in, _DEFAULT_SET );
     
     sprintf( inputstr, "d%d preconditioner cycles:", i );
@@ -936,9 +936,9 @@ void read_solver_parameters( FILE *in, level_struct *l ) {
   
   save_pt = &(g.randomize); g.randomize = 0;
   read_parameter( &save_pt, "randomize test vectors:", "%d", 1, in, _DEFAULT_SET );
-  save_pt = &(g.coarse_iter); g.coarse_iter = 25;
+  save_pt = &(g.coarse_iter); g.coarse_iter = 200;
   read_parameter( &save_pt, "coarse grid iterations:", "%d", 1, in, _DEFAULT_SET );
-  save_pt = &(g.coarse_restart); g.coarse_restart = 40;
+  save_pt = &(g.coarse_restart); g.coarse_restart = 10;
   read_parameter( &save_pt, "coarse grid restarts:", "%d", 1, in, _DEFAULT_SET );
   save_pt = &(g.coarse_tol); g.coarse_tol = 1E-1;
   read_parameter( &save_pt, "coarse grid tolerance:", "%le", 1, in, _DEFAULT_SET );
