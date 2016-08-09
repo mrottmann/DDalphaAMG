@@ -393,6 +393,12 @@
     int setup_iterations[MAX_MG_LEVELS];
 
     /**
+     ** Smoother iterations.
+     **  Default 4
+     **/
+    int smoother_iterations;
+
+    /**
      ** Tolerance used for inversion during k-cycle.
      **  Default 1e-1
      **/

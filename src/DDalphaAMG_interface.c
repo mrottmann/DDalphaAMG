@@ -196,6 +196,17 @@ void DDalphaAMG_update_parameters( DDalphaAMG_parameters *mg_params, DDalphaAMG_
       l_tmp = l_tmp->next_level;
   }
 
+  // int smoother_iterations;
+  l_tmp=&l;
+  for ( i=0; i<g.num_levels; i++ ){
+    if ( mg_params->smoother_iterations != g.post_smooth_iter[i] ) {
+      l_tmp->post_smooth_iter = mg_params->smoother_iterations;
+      g.post_smooth_iter[i] = mg_params->smoother_iterations;
+    }
+    if( g.setup_flag )
+      l_tmp = l_tmp->next_level;
+  }
+
   l_tmp=&l;
   for ( i=0; i<g.num_levels; i++ ){
     if (l_tmp->level > 0) {
