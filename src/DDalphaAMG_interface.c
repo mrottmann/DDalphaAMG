@@ -1072,6 +1072,7 @@ void DDalphaAMG_get_parameters( DDalphaAMG_parameters *mg_params ){
   mg_params->mu_odd_shift = g.tm_mu_odd_shift;
   mg_params->mu_even_shift = g.tm_mu_even_shift;
   mg_params->print = g.print;
+  mg_params->smoother_iterations = g.post_smooth_iter[0];
   
   for( i=0; i<g.num_levels; i++ ) {
     for( j=0; j<4; j++ )
