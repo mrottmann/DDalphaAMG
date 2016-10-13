@@ -594,60 +594,69 @@ void DDalphaAMG_driver( double *vector_out, double *vector_in, DDalphaAMG_status
   for (i=0; i<4; i++)
     sl[i] = ll[i]*g.my_coords[i];
   /*  
-#ifndef INIT_ONE_PREC
+      #ifndef INIT_ONE_PREC
   if ( g.mixed_precision==2 || vector_index_fct!=NULL || g.bc==_TWISTED)
-#else
+  #else
   if ( vector_index_fct!=NULL || g.bc==_TWISTED)
-#endif
+  #endif
   */
-    for (t=0, j=0; t<ll[T]; t++) {
-      if (g.bc==_TWISTED) phase[T] = g.twisted_bc[T]*((double)sl[T]+t)/(double)gl[T];
-      for (z=0; z<ll[Z]; z++) {
-	if (g.bc==_TWISTED) phase[Z] = phase[T] + g.twisted_bc[Z]*((double)sl[Z]+z)/(double)gl[Z];
-	for (y=0; y<ll[Y]; y++) {
-	  if (g.bc==_TWISTED) phase[Y] = phase[Z] + g.twisted_bc[Y]*((double)sl[Y]+y)/(double)gl[Y];
-	  for (x=0; x<ll[X]; x++) {
-	    if (g.bc==_TWISTED) {
-	      phase[X] = phase[Y] + g.twisted_bc[X]*((double)sl[X]+x)/(double)gl[X];
-	      twisted_bc = cexp(I*phase[X]);
-	    } else
-	      twisted_bc = 1.;
-	    if(vector_index_fct!=NULL )
-	      i = vector_index_fct( t, z, y, x );
-	    else 
-	      i=j;
-
-	    for ( mu=0; mu<4; mu++ )
-	      for ( k=0; k<3; k++, j++ ) {
+  for (t=0, j=0; t<ll[T]; t++) {
+    if (g.bc==_TWISTED) phase[T] = g.twisted_bc[T]*((double)sl[T]+t)/(double)gl[T];
+    for (z=0; z<ll[Z]; z++) {
+      if (g.bc==_TWISTED) phase[Z] = phase[T] + g.twisted_bc[Z]*((double)sl[Z]+z)/(double)gl[Z];
+      for (y=0; y<ll[Y]; y++) {
+	if (g.bc==_TWISTED) phase[Y] = phase[Z] + g.twisted_bc[Y]*((double)sl[Y]+y)/(double)gl[Y];
+	for (x=0; x<ll[X]; x++) {
+	  if (g.bc==_TWISTED) {
+	    phase[X] = phase[Y] + g.twisted_bc[X]*((double)sl[X]+x)/(double)gl[X];
+	    twisted_bc = cexp(I*phase[X]);
+	  } else
+	    twisted_bc = 1.;
+	  if(vector_index_fct!=NULL )
+	    i = vector_index_fct( t, z, y, x );
+	  else 
+	    i=j;
+	  
+	  for ( mu=0; mu<4; mu++ )
+	    for ( k=0; k<3; k++, j++ ) {
 #ifndef BASIS4 
-		rhs[j] = ((complex_double)vector_in[i+2*(k+3*mu)] + I*(complex_double)vector_in[i+2*(k+3*mu)+1]) * twisted_bc;
+	      rhs[j] = ((complex_double)vector_in[i+2*(k+3*mu)] + I*(complex_double)vector_in[i+2*(k+3*mu)+1]) * twisted_bc;
 #else
-		rhs[j] = ((complex_double)vector_in[i+2*(k+3*(3-mu))] + I*(complex_double)vector_in[i+2*(k+3*(3-mu))+1]) * twisted_bc;
+	      rhs[j] = ((complex_double)vector_in[i+2*(k+3*(3-mu))] + I*(complex_double)vector_in[i+2*(k+3*(3-mu))+1]) * twisted_bc;
 #endif
-
+	      
 #ifndef INIT_ONE_PREC
-		if(g.mixed_precision==2) {
-		  vtmp=cabs(rhs[j]);
-		  if(vtmp > vmax)
-		    vmax=vtmp;
-		  if( vtmp > EPS_double && vtmp < vmin )
-		    vmin=vtmp;
-		}
+	      if(g.mixed_precision==2) {
+		vtmp=cabs(rhs[j]);
+		if(vtmp > vmax)
+		  vmax=vtmp;
+		if( vtmp > EPS_double && vtmp < vmin )
+		  vmin=vtmp;
 	      }
+	    }
 #endif
-	  }
 	}
       }
     }
-    /*
-  else {
+  }
+  
+  /*
+    else {
     p->b = (vector_double) vector_in;
     p->x = (vector_double) vector_out;
-  }
-    */
+    }
+  */
+    
 #ifndef INIT_ONE_PREC
+    
+  double gvmin, gvmax;
+  if(g.mixed_precision==2) {
+    MPI_Allreduce(&vmin, &gvmin, 1, MPI_DOUBLE, MPI_MIN, g.comm_cart);
+    MPI_Allreduce(&vmax, &gvmax, 1, MPI_DOUBLE, MPI_MAX, g.comm_cart);
+  }
+  
   //switching to double precision on the fine level
-  if(g.mixed_precision==2 && vmin/vmax<EPS_float) {
+  if(g.mixed_precision==2 && gvmin/gvmax<EPS_float) {
     warning0("Changing solver precision on fine level due to rhs elements (min/max=%e)\n", vmin/vmax);
     precision_changed=1;
     g.mixed_precision=1;
@@ -660,7 +669,7 @@ void DDalphaAMG_driver( double *vector_out, double *vector_in, DDalphaAMG_status
     p->tol = g.p_MP.dp.tol;
   } else precision_changed=0;
 #endif
-
+  
   switch(_TYPE) {
     
   case _SOLVE :
