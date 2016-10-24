@@ -615,7 +615,7 @@ void DDalphaAMG_driver( double *vector_out, double *vector_in, DDalphaAMG_status
 	  if(vector_index_fct!=NULL )
 	    i = vector_index_fct( t, z, y, x );
 	  else 
-	    i=j;
+	    i = 2*j;
 	  
 	  for ( mu=0; mu<4; mu++ )
 	    for ( k=0; k<3; k++, j++ ) {
@@ -808,7 +808,7 @@ void DDalphaAMG_driver( double *vector_out, double *vector_in, DDalphaAMG_status
 	    if(vector_index_fct!=NULL )
 	      i = vector_index_fct( t, z, y, x );
 	    else 
-	      i=j;
+	      i = 2*j;
 	    
 	    for ( mu=0; mu<4; mu++ )
 	      for ( k=0; k<3; k++, j++ ){
@@ -1020,8 +1020,7 @@ double DDalphaAMG_vector_norm( double *vector ) {
 #pragma omp parallel num_threads(threading[0]->n_core)
   if(vector!=NULL){
     int start, end;
-    compute_core_start_end( 0, l.vector_size, &start, &end, &l, threading[omp_get_thread_num()]);
-    norm = global_norm_double( (vector_double) vector, start, end, &l, threading[omp_get_thread_num()] );
+    norm = global_norm_double( (vector_double) vector, 0, l.inner_vector_size, &l, threading[omp_get_thread_num()] );
    }
   else {
     warning0("Vector NULL when calling DDalphaAMG_define_vector_const!");
@@ -1035,7 +1034,7 @@ void DDalphaAMG_vector_saxpy( double *vector_out, double a, double *x, double *y
   #pragma omp parallel num_threads(threading[0]->n_core)
   if(vector_out!=NULL && x!=NULL && y!=NULL){
     int start, end;
-    compute_core_start_end( 0, l.vector_size, &start, &end, &l, threading[omp_get_thread_num()]);
+    compute_core_start_end( 0, l.inner_vector_size, &start, &end, &l, threading[omp_get_thread_num()]);
     vector_double_saxpy( (vector_double) vector_out, (vector_double) x, (vector_double) y, a, start, end, &l );
   }
   else {
