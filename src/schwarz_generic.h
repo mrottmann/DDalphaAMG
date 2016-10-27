@@ -73,5 +73,23 @@ struct Thread;
       return site_index( coord[T], coord[Z], coord[Y], coord[X], dt, it );
     }
   }
-  
+
+#ifdef OPTIMIZED_NEIGHBOR_COUPLING_float
+static inline void set_PRECISION_D_vectorized( PRECISION *out1, PRECISION *out2, complex_PRECISION *in ) {
+  // out1: column major, out2: row major
+  for ( int i=0; i<3; i++ ) { // column
+    for ( int j=0; j<3; j++ ) { // row
+      out1[8*i  +j] = creal_PRECISION(in[3*j+i]);
+      out1[8*i+4+j] = cimag_PRECISION(in[3*j+i]);
+      out2[8*i  +j] = creal_PRECISION(in[j+3*i]);
+      out2[8*i+4+j] = cimag_PRECISION(in[j+3*i]);
+    }
+    out1[8*i+3] = 0.0;
+    out1[8*i+7] = 0.0;
+    out2[8*i+3] = 0.0;
+    out2[8*i+7] = 0.0;
+  }
+}
+#endif
+
 #endif 

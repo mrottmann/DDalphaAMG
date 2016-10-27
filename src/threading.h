@@ -101,7 +101,10 @@
 
 #ifdef OPENMP
 #include <omp.h>
+#define DO_PRAGMA(EXP) _Pragma (#EXP)
+#define THREADED(EXP) DO_PRAGMA ( omp parallel num_threads( EXP ) )
 #else
+#define THREADED(EXP)
 static inline int omp_get_thread_num( void ) {
   return 0;
 }

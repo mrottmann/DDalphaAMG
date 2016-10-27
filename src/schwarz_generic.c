@@ -27,6 +27,8 @@ void smoother_PRECISION_def( level_struct *l ) {
     schwarz_PRECISION_def( &(l->s_PRECISION), &(g.op_double), l );
   
   l->p_PRECISION.op = &(l->s_PRECISION.op);
+  l->p_PRECISION.v_start = 0;
+  l->p_PRECISION.v_end = l->inner_vector_size;
   if ( g.method == 6 ) {
     l->p_PRECISION.eval_operator = (l->depth > 0)?g5D_apply_coarse_operator_PRECISION:g5D_plus_clover_PRECISION;
   } else {
@@ -49,15 +51,12 @@ void schwarz_PRECISION_init( schwarz_PRECISION_struct *s, level_struct *l ) {
   s->index[T] = NULL;
   s->oe_index[T] = NULL;
   s->block = NULL;
-  s->bbuf1 = NULL;
   s->buf1 = NULL;
   s->buf2 = NULL;
   s->buf3 = NULL;
   s->buf4 = NULL;
   s->buf5 = NULL;
   l->sbuf_PRECISION[0] = NULL;
-  s->oe_bbuf[0] = NULL;
-  s->oe_bbuf[1] = NULL;
   s->oe_buf[0] = NULL;
   s->oe_buf[1] = NULL;
   s->oe_buf[2] = NULL;
@@ -73,7 +72,7 @@ void schwarz_PRECISION_init( schwarz_PRECISION_struct *s, level_struct *l ) {
 
 void schwarz_PRECISION_alloc( schwarz_PRECISION_struct *s, level_struct *l ) {
   
-  int i, j, n, mu, nu, *bl = l->block_lattice, vs = (l->depth==0)?l->inner_vector_size:l->vector_size;
+  int i, j, n, mu, nu, *bl = l->block_lattice;
   
   if ( g.method == 4 ) {
     fgmres_PRECISION_struct_alloc( l->block_iter, 1, (l->depth==0)?l->inner_vector_size:l->vector_size,
@@ -140,22 +139,19 @@ void schwarz_PRECISION_alloc( schwarz_PRECISION_struct *s, level_struct *l ) {
   }
   
   MALLOC( s->block, block_struct, s->num_blocks );
-  MALLOC( s->bbuf1, complex_PRECISION, (l->depth==0&&g.odd_even?9:3)*s->block_vector_size );
+
+  int svs = l->schwarz_vector_size, vs = (l->depth==0)?l->inner_vector_size:l->vector_size;
+
+#ifdef HAVE_TM1p1
+  svs *= 2;
+  vs *= 2;
+#endif
+
   if ( l->depth == 0 ) {
-    MALLOC( s->oe_buf[0], complex_PRECISION, 4*l->inner_vector_size );
-    s->oe_buf[1] = s->oe_buf[0] + l->inner_vector_size;
-    s->oe_buf[2] = s->oe_buf[1] + l->inner_vector_size;
-    s->oe_buf[3] = s->oe_buf[2] + l->inner_vector_size;
-  }
-  s->bbuf2 = s->bbuf1 + s->block_vector_size;
-  s->bbuf3 = s->bbuf2 + s->block_vector_size;
-  if ( l->depth == 0 && g.odd_even ) {
-    s->oe_bbuf[0] = s->bbuf3 + s->block_vector_size;
-    s->oe_bbuf[1] = s->oe_bbuf[0] + s->block_vector_size;
-    s->oe_bbuf[2] = s->oe_bbuf[1] + s->block_vector_size;
-    s->oe_bbuf[3] = s->oe_bbuf[2] + s->block_vector_size;
-    s->oe_bbuf[4] = s->oe_bbuf[3] + s->block_vector_size;
-    s->oe_bbuf[5] = s->oe_bbuf[4] + s->block_vector_size;
+    MALLOC( s->oe_buf[0], complex_PRECISION, 4*vs );
+    s->oe_buf[1] = s->oe_buf[0] + vs;
+    s->oe_buf[2] = s->oe_buf[1] + vs;
+    s->oe_buf[3] = s->oe_buf[2] + vs;
   }
   
   n = 0;
@@ -176,24 +172,24 @@ void schwarz_PRECISION_alloc( schwarz_PRECISION_struct *s, level_struct *l ) {
     s->block[i].bt = NULL;
     MALLOC( s->block[i].bt, int, n );
   }
-  
-  MALLOC( s->buf1, complex_PRECISION, vs+3*l->schwarz_vector_size );
+
+  MALLOC( s->buf1, complex_PRECISION, vs+3*svs );
   s->buf2 = s->buf1 + vs;
-  s->buf3 = s->buf2 + l->schwarz_vector_size;
-  s->buf4 = s->buf3 + l->schwarz_vector_size;
-  
+  s->buf3 = s->buf2 + svs;
+  s->buf4 = s->buf3 + svs;
+    
   if ( g.method == 1 )
-    MALLOC( s->buf5, complex_PRECISION, l->schwarz_vector_size );
+    MALLOC( s->buf5, complex_PRECISION, svs );
   
   MALLOC( l->sbuf_PRECISION[0], complex_PRECISION, 2*vs );
   l->sbuf_PRECISION[1] = l->sbuf_PRECISION[0] + vs;
 
   // these buffers are introduced to make local_minres_PRECISION thread-safe
-  MALLOC( s->local_minres_buffer[0], complex_PRECISION, l->schwarz_vector_size );
-  MALLOC( s->local_minres_buffer[1], complex_PRECISION, l->schwarz_vector_size );
-  MALLOC( s->local_minres_buffer[2], complex_PRECISION, l->schwarz_vector_size );
+  MALLOC( s->local_minres_buffer[0], complex_PRECISION, svs );
+  MALLOC( s->local_minres_buffer[1], complex_PRECISION, svs );
+  MALLOC( s->local_minres_buffer[2], complex_PRECISION, svs );
   
-#ifdef OPTIMIZED_NEIGHBOR_COUPLING_PRECISION
+#ifdef OPTIMIZED_NEIGHBOR_COUPLING_float
   if ( l->depth == 0 ) {
     MALLOC_HUGEPAGES( s->op.D_vectorized, PRECISION, 2*4*(2*l->vector_size-l->inner_vector_size), 4*SIMD_LENGTH_PRECISION );
     MALLOC_HUGEPAGES( s->op.D_transformed_vectorized, PRECISION, 2*4*(2*l->vector_size-l->inner_vector_size), 4*SIMD_LENGTH_PRECISION );
@@ -202,6 +198,9 @@ void schwarz_PRECISION_alloc( schwarz_PRECISION_struct *s, level_struct *l ) {
 #ifdef OPTIMIZED_SELF_COUPLING_PRECISION
   if ( l->depth == 0 ) {
     MALLOC_HUGEPAGES( s->op.clover_vectorized, PRECISION, 2*6*l->inner_vector_size, 4*SIMD_LENGTH_PRECISION );
+#ifdef HAVE_TM1p1
+    MALLOC_HUGEPAGES( s->op.clover_doublet_vectorized, PRECISION, 4*2*6*l->inner_vector_size, 4*SIMD_LENGTH_PRECISION );
+#endif
   }
 #endif
 }
@@ -209,7 +208,7 @@ void schwarz_PRECISION_alloc( schwarz_PRECISION_struct *s, level_struct *l ) {
 
 void schwarz_PRECISION_free( schwarz_PRECISION_struct *s, level_struct *l ) {
   
-  int i, n, mu, nu, *bl = l->block_lattice, vs = (l->depth==0)?l->inner_vector_size:l->vector_size;
+  int i, n, mu, nu, *bl = l->block_lattice;
   
   if ( g.method == 4 || g.method == 5 || g.method == 6 )
     fgmres_PRECISION_struct_free( &(l->sp_PRECISION), l );
@@ -252,37 +251,42 @@ void schwarz_PRECISION_free( schwarz_PRECISION_struct *s, level_struct *l ) {
   }
   
   FREE( s->block, block_struct, s->num_blocks );
-  FREE( s->bbuf1, complex_PRECISION, (l->depth==0&&g.odd_even?9:3)*s->block_vector_size );
-  if ( l->depth == 0 ) {
+
+  int svs = l->schwarz_vector_size, vs = (l->depth==0)?l->inner_vector_size:l->vector_size;
+
+#ifdef HAVE_TM1p1
+  svs *= 2;
+  vs *= 2;
+#endif
+ if ( l->depth == 0 ) {
     s->oe_buf[1] = NULL;
     s->oe_buf[2] = NULL;
     s->oe_buf[3] = NULL;
-    FREE( s->oe_buf[0], complex_PRECISION, 4*l->inner_vector_size );
+    FREE( s->oe_buf[0], complex_PRECISION, 4*vs );
     s->oe_buf[0] = NULL;
   }
-  s->bbuf2 = NULL; s->bbuf3 = NULL; s->oe_bbuf[0] = NULL; s->oe_bbuf[1] = NULL;
-  s->oe_bbuf[2] = NULL; s->oe_bbuf[3] = NULL; s->oe_bbuf[4] = NULL; s->oe_bbuf[5] = NULL;
   
-  FREE( s->buf1, complex_PRECISION, vs+3*l->schwarz_vector_size );
+ 
+  FREE( s->buf1, complex_PRECISION, vs+3*svs );
   s->buf2 = NULL; s->buf3 = NULL;
   s->buf4 = NULL;
   
   if ( g.method == 1 )
-    FREE( s->buf5, complex_PRECISION, l->schwarz_vector_size );
+    FREE( s->buf5, complex_PRECISION, svs );
   
   operator_PRECISION_free( &(s->op), _SCHWARZ, l );
   
   FREE( l->sbuf_PRECISION[0], complex_PRECISION, 2*vs );
   l->sbuf_PRECISION[1] = NULL;
 
-  FREE( s->local_minres_buffer[0], complex_PRECISION, l->schwarz_vector_size );
-  FREE( s->local_minres_buffer[1], complex_PRECISION, l->schwarz_vector_size );
-  FREE( s->local_minres_buffer[2], complex_PRECISION, l->schwarz_vector_size );
+  FREE( s->local_minres_buffer[0], complex_PRECISION, svs );
+  FREE( s->local_minres_buffer[1], complex_PRECISION, svs );
+  FREE( s->local_minres_buffer[2], complex_PRECISION, svs );
   s->local_minres_buffer[0] = NULL;
   s->local_minres_buffer[1] = NULL;
   s->local_minres_buffer[2] = NULL;
   
-#ifdef OPTIMIZED_NEIGHBOR_COUPLING_PRECISION
+#ifdef OPTIMIZED_NEIGHBOR_COUPLING_float
   if ( l->depth == 0 ) {
     FREE_HUGEPAGES( s->op.D_vectorized, PRECISION, 2*4*(2*l->vector_size-l->inner_vector_size) );
     FREE_HUGEPAGES( s->op.D_transformed_vectorized, PRECISION, 2*4*(2*l->vector_size-l->inner_vector_size) );
@@ -291,6 +295,9 @@ void schwarz_PRECISION_free( schwarz_PRECISION_struct *s, level_struct *l ) {
 #ifdef OPTIMIZED_SELF_COUPLING_PRECISION
   if ( l->depth == 0 ) {
     FREE_HUGEPAGES( s->op.clover_vectorized, PRECISION, 2*6*l->inner_vector_size );
+#ifdef HAVE_TM1p1
+    FREE_HUGEPAGES( s->op.clover_doublet_vectorized, PRECISION, 4*2*6*l->inner_vector_size );  
+#endif
   }
 #endif
 }
@@ -726,245 +733,547 @@ void schwarz_PRECISION_boundary_update( schwarz_PRECISION_struct *s, level_struc
   }
 }
 
-#ifndef OPTIMIZED_NEIGHBOR_COUPLING_PRECISION
+
 void block_PRECISION_boundary_op( vector_PRECISION eta, vector_PRECISION phi, int k,
                                   schwarz_PRECISION_struct *s, level_struct *l ) {
   // k: number of current block
-  int i, mu, index, neighbor_index, *bbl = s->block_boundary_length;
-  complex_PRECISION buf1[12], *buf2=buf1+6;
+  int *bbl = s->block_boundary_length;
+#ifdef OPTIMIZED_NEIGHBOR_COUPLING_float
+  PRECISION *Dplus = s->op.D_vectorized;
+  PRECISION *Dminus = s->op.D_transformed_vectorized;
+  
+  for ( int mu=0; mu<4; mu++ ) {
+    boundary_plus_coupling_PRECISION( (PRECISION*)eta, Dplus, (PRECISION*)phi,
+                                              mu, bbl[2*mu], bbl[2*mu+1], s->block[k].bt, NULL );
+    boundary_minus_coupling_PRECISION( (PRECISION*)eta, Dminus, (PRECISION*)phi,
+                                               mu, bbl[2*mu+1], bbl[2*mu+2], s->block[k].bt, NULL );
+  }
+#else
+  int i, mu, index, neighbor_index;
   config_PRECISION D_pt, D = s->op.D;
   vector_PRECISION phi_pt, eta_pt;
+
+#ifdef HAVE_TM1p1
+  if( g.n_flavours == 2 ) {
+    complex_PRECISION buf1[24], *buf2=buf1+12;
+    mu=T;
+    // plus mu direction
+    for ( i=bbl[2*mu]; i<bbl[2*mu+1]; i+=2 ) {
+      index = s->block[k].bt[i];
+      neighbor_index = s->block[k].bt[i+1];
+      D_pt = D + 36*index + 9*mu;
+      phi_pt = phi + 24*neighbor_index;
+      eta_pt = eta + 24*index;
+      dprp_T_PRECISION( buf1, phi_pt );
+      mvm_PRECISION( buf2, D_pt, buf1 );
+      mvm_PRECISION( buf2+3, D_pt, buf1+3 );
+      mvm_PRECISION( buf2+6, D_pt, buf1+6 );
+      mvm_PRECISION( buf2+9, D_pt, buf1+9 );
+      dpbp_su3_T_PRECISION( buf2, eta_pt );
+    }
+    // minus mu direction
+    for ( i=bbl[2*mu+1]; i<bbl[2*mu+2]; i+=2 ) {
+      index = s->block[k].bt[i];
+      neighbor_index = s->block[k].bt[i+1];
+      D_pt = D + 36*neighbor_index + 9*mu;
+      phi_pt = phi + 24*neighbor_index;
+      eta_pt = eta + 24*index;
+      dprn_T_PRECISION( buf1, phi_pt );
+      mvmh_PRECISION( buf2, D_pt, buf1 );
+      mvmh_PRECISION( buf2+3, D_pt, buf1+3 );
+      mvmh_PRECISION( buf2+6, D_pt, buf1+6 );
+      mvmh_PRECISION( buf2+9, D_pt, buf1+9 );
+      dpbn_su3_T_PRECISION( buf2, eta_pt );
+    }
+    
+    mu=Z;
+    // plus mu direction
+    for ( i=bbl[2*mu]; i<bbl[2*mu+1]; i+=2 ) {
+      index = s->block[k].bt[i];
+      neighbor_index = s->block[k].bt[i+1];
+      D_pt = D + 36*index + 9*mu;
+      phi_pt = phi + 24*neighbor_index;
+      eta_pt = eta + 24*index;
+      dprp_Z_PRECISION( buf1, phi_pt );
+      mvm_PRECISION( buf2, D_pt, buf1 );
+      mvm_PRECISION( buf2+3, D_pt, buf1+3 );
+      mvm_PRECISION( buf2+6, D_pt, buf1+6 );
+      mvm_PRECISION( buf2+9, D_pt, buf1+9 );
+      dpbp_su3_Z_PRECISION( buf2, eta_pt );
+    }
+    // minus mu direction
+    for ( i=bbl[2*mu+1]; i<bbl[2*mu+2]; i+=2 ) {
+      index = s->block[k].bt[i];
+      neighbor_index = s->block[k].bt[i+1];
+      D_pt = D + 36*neighbor_index + 9*mu;
+      phi_pt = phi + 24*neighbor_index;
+      eta_pt = eta + 24*index;
+      dprn_Z_PRECISION( buf1, phi_pt );
+      mvmh_PRECISION( buf2, D_pt, buf1 );
+      mvmh_PRECISION( buf2+3, D_pt, buf1+3 );
+      mvmh_PRECISION( buf2+6, D_pt, buf1+6 );
+      mvmh_PRECISION( buf2+9, D_pt, buf1+9 );
+      dpbn_su3_Z_PRECISION( buf2, eta_pt );
+    }
+    
+    mu=Y;
+    // plus mu direction
+    for ( i=bbl[2*mu]; i<bbl[2*mu+1]; i+=2 ) {
+      index = s->block[k].bt[i];
+      neighbor_index = s->block[k].bt[i+1];
+      D_pt = D + 36*index + 9*mu;
+      phi_pt = phi + 24*neighbor_index;
+      eta_pt = eta + 24*index;
+      dprp_Y_PRECISION( buf1, phi_pt );
+      mvm_PRECISION( buf2, D_pt, buf1 );
+      mvm_PRECISION( buf2+3, D_pt, buf1+3 );
+      mvm_PRECISION( buf2+6, D_pt, buf1+6 );
+      mvm_PRECISION( buf2+9, D_pt, buf1+9 );
+      dpbp_su3_Y_PRECISION( buf2, eta_pt );
+    }
+    // minus mu direction
+    for ( i=bbl[2*mu+1]; i<bbl[2*mu+2]; i+=2 ) {
+      index = s->block[k].bt[i];
+      neighbor_index = s->block[k].bt[i+1];
+      D_pt = D + 36*neighbor_index + 9*mu;
+      phi_pt = phi + 24*neighbor_index;
+      eta_pt = eta + 24*index;
+      dprn_Y_PRECISION( buf1, phi_pt );
+      mvmh_PRECISION( buf2, D_pt, buf1 );
+      mvmh_PRECISION( buf2+3, D_pt, buf1+3 );
+      mvmh_PRECISION( buf2+6, D_pt, buf1+6 );
+      mvmh_PRECISION( buf2+9, D_pt, buf1+9 );
+      dpbn_su3_Y_PRECISION( buf2, eta_pt );
+    }
   
-  mu=T;
-  // plus mu direction
-  for ( i=bbl[2*mu]; i<bbl[2*mu+1]; i+=2 ) {
-    index = s->block[k].bt[i];
-    neighbor_index = s->block[k].bt[i+1];
-    D_pt = D + 36*index + 9*mu;
-    phi_pt = phi + 12*neighbor_index;
-    eta_pt = eta + 12*index;
-    prp_T_PRECISION( buf1, phi_pt );
-    mvm_PRECISION( buf2, D_pt, buf1 );
-    mvm_PRECISION( buf2+3, D_pt, buf1+3 );
-    pbp_su3_T_PRECISION( buf2, eta_pt );
-  }
-  // minus mu direction
-  for ( i=bbl[2*mu+1]; i<bbl[2*mu+2]; i+=2 ) {
-    index = s->block[k].bt[i];
-    neighbor_index = s->block[k].bt[i+1];
-    D_pt = D + 36*neighbor_index + 9*mu;
-    phi_pt = phi + 12*neighbor_index;
-    eta_pt = eta + 12*index;
-    prn_T_PRECISION( buf1, phi_pt );
-    mvmh_PRECISION( buf2, D_pt, buf1 );
-    mvmh_PRECISION( buf2+3, D_pt, buf1+3 );
-    pbn_su3_T_PRECISION( buf2, eta_pt );
-  }
-  
-  mu=Z;
-  // plus mu direction
-  for ( i=bbl[2*mu]; i<bbl[2*mu+1]; i+=2 ) {
-    index = s->block[k].bt[i];
-    neighbor_index = s->block[k].bt[i+1];
-    D_pt = D + 36*index + 9*mu;
-    phi_pt = phi + 12*neighbor_index;
-    eta_pt = eta + 12*index;
-    prp_Z_PRECISION( buf1, phi_pt );
-    mvm_PRECISION( buf2, D_pt, buf1 );
-    mvm_PRECISION( buf2+3, D_pt, buf1+3 );
-    pbp_su3_Z_PRECISION( buf2, eta_pt );
-  }
-  // minus mu direction
-  for ( i=bbl[2*mu+1]; i<bbl[2*mu+2]; i+=2 ) {
-    index = s->block[k].bt[i];
-    neighbor_index = s->block[k].bt[i+1];
-    D_pt = D + 36*neighbor_index + 9*mu;
-    phi_pt = phi + 12*neighbor_index;
-    eta_pt = eta + 12*index;
-    prn_Z_PRECISION( buf1, phi_pt );
-    mvmh_PRECISION( buf2, D_pt, buf1 );
-    mvmh_PRECISION( buf2+3, D_pt, buf1+3 );
-    pbn_su3_Z_PRECISION( buf2, eta_pt );
-  }
-  
-  mu=Y;
-  // plus mu direction
-  for ( i=bbl[2*mu]; i<bbl[2*mu+1]; i+=2 ) {
-    index = s->block[k].bt[i];
-    neighbor_index = s->block[k].bt[i+1];
-    D_pt = D + 36*index + 9*mu;
-    phi_pt = phi + 12*neighbor_index;
-    eta_pt = eta + 12*index;
-    prp_Y_PRECISION( buf1, phi_pt );
-    mvm_PRECISION( buf2, D_pt, buf1 );
-    mvm_PRECISION( buf2+3, D_pt, buf1+3 );
-    pbp_su3_Y_PRECISION( buf2, eta_pt );
-  }
-  // minus mu direction
-  for ( i=bbl[2*mu+1]; i<bbl[2*mu+2]; i+=2 ) {
-    index = s->block[k].bt[i];
-    neighbor_index = s->block[k].bt[i+1];
-    D_pt = D + 36*neighbor_index + 9*mu;
-    phi_pt = phi + 12*neighbor_index;
-    eta_pt = eta + 12*index;
-    prn_Y_PRECISION( buf1, phi_pt );
-    mvmh_PRECISION( buf2, D_pt, buf1 );
-    mvmh_PRECISION( buf2+3, D_pt, buf1+3 );
-    pbn_su3_Y_PRECISION( buf2, eta_pt );
-  }
-  
-  mu=X;
-  // plus mu direction
-  for ( i=bbl[2*mu]; i<bbl[2*mu+1]; i+=2 ) {
-    index = s->block[k].bt[i];
-    neighbor_index = s->block[k].bt[i+1];
-    D_pt = D + 36*index + 9*mu;
-    phi_pt = phi + 12*neighbor_index;
-    eta_pt = eta + 12*index;
-    prp_X_PRECISION( buf1, phi_pt );
-    mvm_PRECISION( buf2, D_pt, buf1 );
-    mvm_PRECISION( buf2+3, D_pt, buf1+3 );
-    pbp_su3_X_PRECISION( buf2, eta_pt );
-  }
-  // minus mu direction
-  for ( i=bbl[2*mu+1]; i<bbl[2*mu+2]; i+=2 ) {
-    index = s->block[k].bt[i];
-    neighbor_index = s->block[k].bt[i+1];
-    D_pt = D + 36*neighbor_index + 9*mu;
-    phi_pt = phi + 12*neighbor_index;
-    eta_pt = eta + 12*index;
-    prn_X_PRECISION( buf1, phi_pt );
-    mvmh_PRECISION( buf2, D_pt, buf1 );
-    mvmh_PRECISION( buf2+3, D_pt, buf1+3 );
-    pbn_su3_X_PRECISION( buf2, eta_pt );
-  }  
-}
+    mu=X;
+    // plus mu direction
+    for ( i=bbl[2*mu]; i<bbl[2*mu+1]; i+=2 ) {
+      index = s->block[k].bt[i];
+      neighbor_index = s->block[k].bt[i+1];
+      D_pt = D + 36*index + 9*mu;
+      phi_pt = phi + 24*neighbor_index;
+      eta_pt = eta + 24*index;
+      dprp_X_PRECISION( buf1, phi_pt );
+      mvm_PRECISION( buf2, D_pt, buf1 );
+      mvm_PRECISION( buf2+3, D_pt, buf1+3 );
+      mvm_PRECISION( buf2+6, D_pt, buf1+6 );
+      mvm_PRECISION( buf2+9, D_pt, buf1+9 );
+      dpbp_su3_X_PRECISION( buf2, eta_pt );
+    }
+    // minus mu direction
+    for ( i=bbl[2*mu+1]; i<bbl[2*mu+2]; i+=2 ) {
+      index = s->block[k].bt[i];
+      neighbor_index = s->block[k].bt[i+1];
+      D_pt = D + 36*neighbor_index + 9*mu;
+      phi_pt = phi + 24*neighbor_index;
+      eta_pt = eta + 24*index;
+      dprn_X_PRECISION( buf1, phi_pt );
+      mvmh_PRECISION( buf2, D_pt, buf1 );
+      mvmh_PRECISION( buf2+3, D_pt, buf1+3 );
+      mvmh_PRECISION( buf2+6, D_pt, buf1+6 );
+      mvmh_PRECISION( buf2+9, D_pt, buf1+9 );
+      dpbn_su3_X_PRECISION( buf2, eta_pt );
+    }  
+  } else {
 #endif
+    complex_PRECISION buf1[12], *buf2=buf1+6;
+    mu=T;
+    // plus mu direction
+    for ( i=bbl[2*mu]; i<bbl[2*mu+1]; i+=2 ) {
+      index = s->block[k].bt[i];
+      neighbor_index = s->block[k].bt[i+1];
+      D_pt = D + 36*index + 9*mu;
+      phi_pt = phi + 12*neighbor_index;
+      eta_pt = eta + 12*index;
+      prp_T_PRECISION( buf1, phi_pt );
+      mvm_PRECISION( buf2, D_pt, buf1 );
+      mvm_PRECISION( buf2+3, D_pt, buf1+3 );
+      pbp_su3_T_PRECISION( buf2, eta_pt );
+    }
+    // minus mu direction
+    for ( i=bbl[2*mu+1]; i<bbl[2*mu+2]; i+=2 ) {
+      index = s->block[k].bt[i];
+      neighbor_index = s->block[k].bt[i+1];
+      D_pt = D + 36*neighbor_index + 9*mu;
+      phi_pt = phi + 12*neighbor_index;
+      eta_pt = eta + 12*index;
+      prn_T_PRECISION( buf1, phi_pt );
+      mvmh_PRECISION( buf2, D_pt, buf1 );
+      mvmh_PRECISION( buf2+3, D_pt, buf1+3 );
+      pbn_su3_T_PRECISION( buf2, eta_pt );
+    }
+    
+    mu=Z;
+    // plus mu direction
+    for ( i=bbl[2*mu]; i<bbl[2*mu+1]; i+=2 ) {
+      index = s->block[k].bt[i];
+      neighbor_index = s->block[k].bt[i+1];
+      D_pt = D + 36*index + 9*mu;
+      phi_pt = phi + 12*neighbor_index;
+      eta_pt = eta + 12*index;
+      prp_Z_PRECISION( buf1, phi_pt );
+      mvm_PRECISION( buf2, D_pt, buf1 );
+      mvm_PRECISION( buf2+3, D_pt, buf1+3 );
+      pbp_su3_Z_PRECISION( buf2, eta_pt );
+    }
+    // minus mu direction
+    for ( i=bbl[2*mu+1]; i<bbl[2*mu+2]; i+=2 ) {
+      index = s->block[k].bt[i];
+      neighbor_index = s->block[k].bt[i+1];
+      D_pt = D + 36*neighbor_index + 9*mu;
+      phi_pt = phi + 12*neighbor_index;
+      eta_pt = eta + 12*index;
+      prn_Z_PRECISION( buf1, phi_pt );
+      mvmh_PRECISION( buf2, D_pt, buf1 );
+      mvmh_PRECISION( buf2+3, D_pt, buf1+3 );
+      pbn_su3_Z_PRECISION( buf2, eta_pt );
+    }
+    
+    mu=Y;
+    // plus mu direction
+    for ( i=bbl[2*mu]; i<bbl[2*mu+1]; i+=2 ) {
+      index = s->block[k].bt[i];
+      neighbor_index = s->block[k].bt[i+1];
+      D_pt = D + 36*index + 9*mu;
+      phi_pt = phi + 12*neighbor_index;
+      eta_pt = eta + 12*index;
+      prp_Y_PRECISION( buf1, phi_pt );
+      mvm_PRECISION( buf2, D_pt, buf1 );
+      mvm_PRECISION( buf2+3, D_pt, buf1+3 );
+      pbp_su3_Y_PRECISION( buf2, eta_pt );
+    }
+    // minus mu direction
+    for ( i=bbl[2*mu+1]; i<bbl[2*mu+2]; i+=2 ) {
+      index = s->block[k].bt[i];
+      neighbor_index = s->block[k].bt[i+1];
+      D_pt = D + 36*neighbor_index + 9*mu;
+      phi_pt = phi + 12*neighbor_index;
+      eta_pt = eta + 12*index;
+      prn_Y_PRECISION( buf1, phi_pt );
+      mvmh_PRECISION( buf2, D_pt, buf1 );
+      mvmh_PRECISION( buf2+3, D_pt, buf1+3 );
+      pbn_su3_Y_PRECISION( buf2, eta_pt );
+    }
+  
+    mu=X;
+    // plus mu direction
+    for ( i=bbl[2*mu]; i<bbl[2*mu+1]; i+=2 ) {
+      index = s->block[k].bt[i];
+      neighbor_index = s->block[k].bt[i+1];
+      D_pt = D + 36*index + 9*mu;
+      phi_pt = phi + 12*neighbor_index;
+      eta_pt = eta + 12*index;
+      prp_X_PRECISION( buf1, phi_pt );
+      mvm_PRECISION( buf2, D_pt, buf1 );
+      mvm_PRECISION( buf2+3, D_pt, buf1+3 );
+      pbp_su3_X_PRECISION( buf2, eta_pt );
+    }
+    // minus mu direction
+    for ( i=bbl[2*mu+1]; i<bbl[2*mu+2]; i+=2 ) {
+      index = s->block[k].bt[i];
+      neighbor_index = s->block[k].bt[i+1];
+      D_pt = D + 36*neighbor_index + 9*mu;
+      phi_pt = phi + 12*neighbor_index;
+      eta_pt = eta + 12*index;
+      prn_X_PRECISION( buf1, phi_pt );
+      mvmh_PRECISION( buf2, D_pt, buf1 );
+      mvmh_PRECISION( buf2+3, D_pt, buf1+3 );
+      pbn_su3_X_PRECISION( buf2, eta_pt );
+    }  
+#ifdef HAVE_TM1p1
+  }
+#endif
+#endif
+}
 
 
-#ifndef OPTIMIZED_NEIGHBOR_COUPLING_PRECISION
 void n_block_PRECISION_boundary_op( vector_PRECISION eta, vector_PRECISION phi, int k,
                                     schwarz_PRECISION_struct *s, level_struct *l ) {
   // k: number of current block
-  int i, mu, index, neighbor_index, *bbl = s->block_boundary_length;
-  complex_PRECISION buf1[12], *buf2=buf1+6;
+  int *bbl = s->block_boundary_length;
+#ifdef OPTIMIZED_NEIGHBOR_COUPLING_float
+  PRECISION *Dplus = s->op.D_vectorized;
+  PRECISION *Dminus = s->op.D_transformed_vectorized;
+  
+  for ( int mu=0; mu<4; mu++ ) {
+    boundary_nplus_coupling_PRECISION( (PRECISION*)eta, Dplus, (PRECISION*)phi,
+                                               mu, bbl[2*mu], bbl[2*mu+1], s->block[k].bt, NULL );
+    boundary_nminus_coupling_PRECISION( (PRECISION*)eta, Dminus, (PRECISION*)phi,
+                                                mu, bbl[2*mu+1], bbl[2*mu+2], s->block[k].bt, NULL );
+  }
+#else
+  int i, mu, index, neighbor_index;
   config_PRECISION D_pt, D = s->op.D;
   vector_PRECISION phi_pt, eta_pt;
+
+#ifdef HAVE_TM1p1
+  if( g.n_flavours == 2 ) {
+    complex_PRECISION buf1[24], *buf2=buf1+12;
+    mu=T;
+    // plus mu direction
+    for ( i=bbl[2*mu]; i<bbl[2*mu+1]; i+=2 ) {
+      index = s->block[k].bt[i];
+      neighbor_index = s->block[k].bt[i+1];
+      D_pt = D + 36*index + 9*mu;
+      phi_pt = phi + 24*neighbor_index;
+      eta_pt = eta + 24*index;
+      dprp_T_PRECISION( buf1, phi_pt );
+      nmvm_PRECISION( buf2, D_pt, buf1 );
+      nmvm_PRECISION( buf2+3, D_pt, buf1+3 );
+      nmvm_PRECISION( buf2+6, D_pt, buf1+6 );
+      nmvm_PRECISION( buf2+9, D_pt, buf1+9 );
+      dpbp_su3_T_PRECISION( buf2, eta_pt );
+    }
+    // minus mu direction
+    for ( i=bbl[2*mu+1]; i<bbl[2*mu+2]; i+=2 ) {
+      index = s->block[k].bt[i];
+      neighbor_index = s->block[k].bt[i+1];
+      D_pt = D + 36*neighbor_index + 9*mu;
+      phi_pt = phi + 24*neighbor_index;
+      eta_pt = eta + 24*index;
+      dprn_T_PRECISION( buf1, phi_pt );
+      nmvmh_PRECISION( buf2, D_pt, buf1 );
+      nmvmh_PRECISION( buf2+3, D_pt, buf1+3 );
+      nmvmh_PRECISION( buf2+6, D_pt, buf1+6 );
+      nmvmh_PRECISION( buf2+9, D_pt, buf1+9 );
+      dpbn_su3_T_PRECISION( buf2, eta_pt );
+    }
+    
+    mu=Z;
+    // plus mu direction
+    for ( i=bbl[2*mu]; i<bbl[2*mu+1]; i+=2 ) {
+      index = s->block[k].bt[i];
+      neighbor_index = s->block[k].bt[i+1];
+      D_pt = D + 36*index + 9*mu;
+      phi_pt = phi + 24*neighbor_index;
+      eta_pt = eta + 24*index;
+      dprp_Z_PRECISION( buf1, phi_pt );
+      nmvm_PRECISION( buf2, D_pt, buf1 );
+      nmvm_PRECISION( buf2+3, D_pt, buf1+3 );
+      nmvm_PRECISION( buf2+6, D_pt, buf1+6 );
+      nmvm_PRECISION( buf2+9, D_pt, buf1+9 );
+      dpbp_su3_Z_PRECISION( buf2, eta_pt );
+    }
+    // minus mu direction
+    for ( i=bbl[2*mu+1]; i<bbl[2*mu+2]; i+=2 ) {
+      index = s->block[k].bt[i];
+      neighbor_index = s->block[k].bt[i+1];
+      D_pt = D + 36*neighbor_index + 9*mu;
+      phi_pt = phi + 24*neighbor_index;
+      eta_pt = eta + 24*index;
+      dprn_Z_PRECISION( buf1, phi_pt );
+      nmvmh_PRECISION( buf2, D_pt, buf1 );
+      nmvmh_PRECISION( buf2+3, D_pt, buf1+3 );
+      nmvmh_PRECISION( buf2+6, D_pt, buf1+6 );
+      nmvmh_PRECISION( buf2+9, D_pt, buf1+9 );
+      dpbn_su3_Z_PRECISION( buf2, eta_pt );
+    }
+    
+    mu=Y;
+    // plus mu direction
+    for ( i=bbl[2*mu]; i<bbl[2*mu+1]; i+=2 ) {
+      index = s->block[k].bt[i];
+      neighbor_index = s->block[k].bt[i+1];
+      D_pt = D + 36*index + 9*mu;
+      phi_pt = phi + 24*neighbor_index;
+      eta_pt = eta + 24*index;
+      dprp_Y_PRECISION( buf1, phi_pt );
+      nmvm_PRECISION( buf2, D_pt, buf1 );
+      nmvm_PRECISION( buf2+3, D_pt, buf1+3 );
+      nmvm_PRECISION( buf2+6, D_pt, buf1+6 );
+      nmvm_PRECISION( buf2+9, D_pt, buf1+9 );
+      dpbp_su3_Y_PRECISION( buf2, eta_pt );
+    }
+    // minus mu direction
+    for ( i=bbl[2*mu+1]; i<bbl[2*mu+2]; i+=2 ) {
+      index = s->block[k].bt[i];
+      neighbor_index = s->block[k].bt[i+1];
+      D_pt = D + 36*neighbor_index + 9*mu;
+      phi_pt = phi + 24*neighbor_index;
+      eta_pt = eta + 24*index;
+      dprn_Y_PRECISION( buf1, phi_pt );
+      nmvmh_PRECISION( buf2, D_pt, buf1 );
+      nmvmh_PRECISION( buf2+3, D_pt, buf1+3 );
+      nmvmh_PRECISION( buf2+6, D_pt, buf1+6 );
+      nmvmh_PRECISION( buf2+9, D_pt, buf1+9 );
+      dpbn_su3_Y_PRECISION( buf2, eta_pt );
+    }
   
-  mu=T;
-  // plus mu direction
-  for ( i=bbl[2*mu]; i<bbl[2*mu+1]; i+=2 ) {
-    index = s->block[k].bt[i];
-    neighbor_index = s->block[k].bt[i+1];
-    D_pt = D + 36*index + 9*mu;
-    phi_pt = phi + 12*neighbor_index;
-    eta_pt = eta + 12*index;
-    prp_T_PRECISION( buf1, phi_pt );
-    nmvm_PRECISION( buf2, D_pt, buf1 );
-    nmvm_PRECISION( buf2+3, D_pt, buf1+3 );
-    pbp_su3_T_PRECISION( buf2, eta_pt );
-  }
-  // minus mu direction
-  for ( i=bbl[2*mu+1]; i<bbl[2*mu+2]; i+=2 ) {
-    index = s->block[k].bt[i];
-    neighbor_index = s->block[k].bt[i+1];
-    D_pt = D + 36*neighbor_index + 9*mu;
-    phi_pt = phi + 12*neighbor_index;
-    eta_pt = eta + 12*index;
-    prn_T_PRECISION( buf1, phi_pt );
-    nmvmh_PRECISION( buf2, D_pt, buf1 );
-    nmvmh_PRECISION( buf2+3, D_pt, buf1+3 );
-    pbn_su3_T_PRECISION( buf2, eta_pt );
-  }
-  
-  mu=Z;
-  // plus mu direction
-  for ( i=bbl[2*mu]; i<bbl[2*mu+1]; i+=2 ) {
-    index = s->block[k].bt[i];
-    neighbor_index = s->block[k].bt[i+1];
-    D_pt = D + 36*index + 9*mu;
-    phi_pt = phi + 12*neighbor_index;
-    eta_pt = eta + 12*index;
-    prp_Z_PRECISION( buf1, phi_pt );
-    nmvm_PRECISION( buf2, D_pt, buf1 );
-    nmvm_PRECISION( buf2+3, D_pt, buf1+3 );
-    pbp_su3_Z_PRECISION( buf2, eta_pt );
-  }
-  // minus mu direction
-  for ( i=bbl[2*mu+1]; i<bbl[2*mu+2]; i+=2 ) {
-    index = s->block[k].bt[i];
-    neighbor_index = s->block[k].bt[i+1];
-    D_pt = D + 36*neighbor_index + 9*mu;
-    phi_pt = phi + 12*neighbor_index;
-    eta_pt = eta + 12*index;
-    prn_Z_PRECISION( buf1, phi_pt );
-    nmvmh_PRECISION( buf2, D_pt, buf1 );
-    nmvmh_PRECISION( buf2+3, D_pt, buf1+3 );
-    pbn_su3_Z_PRECISION( buf2, eta_pt );
-  }
-  
-  mu=Y;
-  // plus mu direction
-  for ( i=bbl[2*mu]; i<bbl[2*mu+1]; i+=2 ) {
-    index = s->block[k].bt[i];
-    neighbor_index = s->block[k].bt[i+1];
-    D_pt = D + 36*index + 9*mu;
-    phi_pt = phi + 12*neighbor_index;
-    eta_pt = eta + 12*index;
-    prp_Y_PRECISION( buf1, phi_pt );
-    nmvm_PRECISION( buf2, D_pt, buf1 );
-    nmvm_PRECISION( buf2+3, D_pt, buf1+3 );
-    pbp_su3_Y_PRECISION( buf2, eta_pt );
-  }
-  // minus mu direction
-  for ( i=bbl[2*mu+1]; i<bbl[2*mu+2]; i+=2 ) {
-    index = s->block[k].bt[i];
-    neighbor_index = s->block[k].bt[i+1];
-    D_pt = D + 36*neighbor_index + 9*mu;
-    phi_pt = phi + 12*neighbor_index;
-    eta_pt = eta + 12*index;
-    prn_Y_PRECISION( buf1, phi_pt );
-    nmvmh_PRECISION( buf2, D_pt, buf1 );
-    nmvmh_PRECISION( buf2+3, D_pt, buf1+3 );
-    pbn_su3_Y_PRECISION( buf2, eta_pt );
-  }
-  
-  mu=X;
-  // plus mu direction
-  for ( i=bbl[2*mu]; i<bbl[2*mu+1]; i+=2 ) {
-    index = s->block[k].bt[i];
-    neighbor_index = s->block[k].bt[i+1];
-    D_pt = D + 36*index + 9*mu;
-    phi_pt = phi + 12*neighbor_index;
-    eta_pt = eta + 12*index;
-    prp_X_PRECISION( buf1, phi_pt );
-    nmvm_PRECISION( buf2, D_pt, buf1 );
-    nmvm_PRECISION( buf2+3, D_pt, buf1+3 );
-    pbp_su3_X_PRECISION( buf2, eta_pt );
-  }
-  // minus mu direction
-  for ( i=bbl[2*mu+1]; i<bbl[2*mu+2]; i+=2 ) {
-    index = s->block[k].bt[i];
-    neighbor_index = s->block[k].bt[i+1];
-    D_pt = D + 36*neighbor_index + 9*mu;
-    phi_pt = phi + 12*neighbor_index;
-    eta_pt = eta + 12*index;
-    prn_X_PRECISION( buf1, phi_pt );
-    nmvmh_PRECISION( buf2, D_pt, buf1 );
-    nmvmh_PRECISION( buf2+3, D_pt, buf1+3 );
-    pbn_su3_X_PRECISION( buf2, eta_pt );
-  }  
-}
+    mu=X;
+    // plus mu direction
+    for ( i=bbl[2*mu]; i<bbl[2*mu+1]; i+=2 ) {
+      index = s->block[k].bt[i];
+      neighbor_index = s->block[k].bt[i+1];
+      D_pt = D + 36*index + 9*mu;
+      phi_pt = phi + 24*neighbor_index;
+      eta_pt = eta + 24*index;
+      dprp_X_PRECISION( buf1, phi_pt );
+      nmvm_PRECISION( buf2, D_pt, buf1 );
+      nmvm_PRECISION( buf2+3, D_pt, buf1+3 );
+      nmvm_PRECISION( buf2+6, D_pt, buf1+6 );
+      nmvm_PRECISION( buf2+9, D_pt, buf1+9 );
+      dpbp_su3_X_PRECISION( buf2, eta_pt );
+    }
+    // minus mu direction
+    for ( i=bbl[2*mu+1]; i<bbl[2*mu+2]; i+=2 ) {
+      index = s->block[k].bt[i];
+      neighbor_index = s->block[k].bt[i+1];
+      D_pt = D + 36*neighbor_index + 9*mu;
+      phi_pt = phi + 24*neighbor_index;
+      eta_pt = eta + 24*index;
+      dprn_X_PRECISION( buf1, phi_pt );
+      nmvmh_PRECISION( buf2, D_pt, buf1 );
+      nmvmh_PRECISION( buf2+3, D_pt, buf1+3 );
+      nmvmh_PRECISION( buf2+6, D_pt, buf1+6 );
+      nmvmh_PRECISION( buf2+9, D_pt, buf1+9 );
+      dpbn_su3_X_PRECISION( buf2, eta_pt );
+    }
+  } else {
 #endif
+    complex_PRECISION buf1[12], *buf2=buf1+6;
+    mu=T;
+    // plus mu direction
+    for ( i=bbl[2*mu]; i<bbl[2*mu+1]; i+=2 ) {
+      index = s->block[k].bt[i];
+      neighbor_index = s->block[k].bt[i+1];
+      D_pt = D + 36*index + 9*mu;
+      phi_pt = phi + 12*neighbor_index;
+      eta_pt = eta + 12*index;
+      prp_T_PRECISION( buf1, phi_pt );
+      nmvm_PRECISION( buf2, D_pt, buf1 );
+      nmvm_PRECISION( buf2+3, D_pt, buf1+3 );
+      pbp_su3_T_PRECISION( buf2, eta_pt );
+    }
+    // minus mu direction
+    for ( i=bbl[2*mu+1]; i<bbl[2*mu+2]; i+=2 ) {
+      index = s->block[k].bt[i];
+      neighbor_index = s->block[k].bt[i+1];
+      D_pt = D + 36*neighbor_index + 9*mu;
+      phi_pt = phi + 12*neighbor_index;
+      eta_pt = eta + 12*index;
+      prn_T_PRECISION( buf1, phi_pt );
+      nmvmh_PRECISION( buf2, D_pt, buf1 );
+      nmvmh_PRECISION( buf2+3, D_pt, buf1+3 );
+      pbn_su3_T_PRECISION( buf2, eta_pt );
+    }
+    
+    mu=Z;
+    // plus mu direction
+    for ( i=bbl[2*mu]; i<bbl[2*mu+1]; i+=2 ) {
+      index = s->block[k].bt[i];
+      neighbor_index = s->block[k].bt[i+1];
+      D_pt = D + 36*index + 9*mu;
+      phi_pt = phi + 12*neighbor_index;
+      eta_pt = eta + 12*index;
+      prp_Z_PRECISION( buf1, phi_pt );
+      nmvm_PRECISION( buf2, D_pt, buf1 );
+      nmvm_PRECISION( buf2+3, D_pt, buf1+3 );
+      pbp_su3_Z_PRECISION( buf2, eta_pt );
+    }
+    // minus mu direction
+    for ( i=bbl[2*mu+1]; i<bbl[2*mu+2]; i+=2 ) {
+      index = s->block[k].bt[i];
+      neighbor_index = s->block[k].bt[i+1];
+      D_pt = D + 36*neighbor_index + 9*mu;
+      phi_pt = phi + 12*neighbor_index;
+      eta_pt = eta + 12*index;
+      prn_Z_PRECISION( buf1, phi_pt );
+      nmvmh_PRECISION( buf2, D_pt, buf1 );
+      nmvmh_PRECISION( buf2+3, D_pt, buf1+3 );
+      pbn_su3_Z_PRECISION( buf2, eta_pt );
+    }
+    
+    mu=Y;
+    // plus mu direction
+    for ( i=bbl[2*mu]; i<bbl[2*mu+1]; i+=2 ) {
+      index = s->block[k].bt[i];
+      neighbor_index = s->block[k].bt[i+1];
+      D_pt = D + 36*index + 9*mu;
+      phi_pt = phi + 12*neighbor_index;
+      eta_pt = eta + 12*index;
+      prp_Y_PRECISION( buf1, phi_pt );
+      nmvm_PRECISION( buf2, D_pt, buf1 );
+      nmvm_PRECISION( buf2+3, D_pt, buf1+3 );
+      pbp_su3_Y_PRECISION( buf2, eta_pt );
+    }
+    // minus mu direction
+    for ( i=bbl[2*mu+1]; i<bbl[2*mu+2]; i+=2 ) {
+      index = s->block[k].bt[i];
+      neighbor_index = s->block[k].bt[i+1];
+      D_pt = D + 36*neighbor_index + 9*mu;
+      phi_pt = phi + 12*neighbor_index;
+      eta_pt = eta + 12*index;
+      prn_Y_PRECISION( buf1, phi_pt );
+      nmvmh_PRECISION( buf2, D_pt, buf1 );
+      nmvmh_PRECISION( buf2+3, D_pt, buf1+3 );
+      pbn_su3_Y_PRECISION( buf2, eta_pt );
+    }
+    
+    mu=X;
+    // plus mu direction
+    for ( i=bbl[2*mu]; i<bbl[2*mu+1]; i+=2 ) {
+      index = s->block[k].bt[i];
+      neighbor_index = s->block[k].bt[i+1];
+      D_pt = D + 36*index + 9*mu;
+      phi_pt = phi + 12*neighbor_index;
+      eta_pt = eta + 12*index;
+      prp_X_PRECISION( buf1, phi_pt );
+      nmvm_PRECISION( buf2, D_pt, buf1 );
+      nmvm_PRECISION( buf2+3, D_pt, buf1+3 );
+      pbp_su3_X_PRECISION( buf2, eta_pt );
+    }
+    // minus mu direction
+    for ( i=bbl[2*mu+1]; i<bbl[2*mu+2]; i+=2 ) {
+      index = s->block[k].bt[i];
+      neighbor_index = s->block[k].bt[i+1];
+      D_pt = D + 36*neighbor_index + 9*mu;
+      phi_pt = phi + 12*neighbor_index;
+      eta_pt = eta + 12*index;
+      prn_X_PRECISION( buf1, phi_pt );
+      nmvmh_PRECISION( buf2, D_pt, buf1 );
+      nmvmh_PRECISION( buf2+3, D_pt, buf1+3 );
+      pbn_su3_X_PRECISION( buf2, eta_pt );
+    } 
+#ifdef HAVE_TM1p1
+  }
+#endif
+#endif 
+}
 
 
-#ifndef OPTIMIZED_NEIGHBOR_COUPLING_PRECISION
 void coarse_block_PRECISION_boundary_op( vector_PRECISION eta, vector_PRECISION phi,
                                          int k, schwarz_PRECISION_struct *s, level_struct *l ) {
   // k: number of current block
   int *bbl = s->block_boundary_length, n = l->num_lattice_site_var;
+
+#ifdef VECTORIZE_COARSE_OPERATOR_PRECISION
+  int column_offset = SIMD_LENGTH_PRECISION*((2*l->num_parent_eig_vect+SIMD_LENGTH_PRECISION-1)/SIMD_LENGTH_PRECISION);
+  int vectorized_link_offset = 4*l->num_parent_eig_vect*column_offset;
+  
+  for ( int mu=0; mu<4; mu++ ) {
+    OPERATOR_TYPE_PRECISION *Dplus = s->op.D_vectorized + mu*vectorized_link_offset;
+    OPERATOR_TYPE_PRECISION *Dminus = s->op.D_transformed_vectorized + mu*vectorized_link_offset;
+    // plus mu direction
+    for ( int i=bbl[2*mu]; i<bbl[2*mu+1]; i+=2 ) {
+      int index = s->block[k].bt[i];
+      int neighbor_index = s->block[k].bt[i+1];
+      vector_PRECISION phi_pt = phi + n*neighbor_index;
+      vector_PRECISION eta_pt = eta + n*index;
+      coarse_hopp_PRECISION_vectorized( eta_pt, phi_pt, Dplus + 4*vectorized_link_offset*index, l );
+    }
+    // minus mu direction
+    for ( int i=bbl[2*mu+1]; i<bbl[2*mu+2]; i+=2 ) {
+      int index = s->block[k].bt[i];
+      int neighbor_index = s->block[k].bt[i+1];
+      vector_PRECISION phi_pt = phi + n*neighbor_index;
+      vector_PRECISION eta_pt = eta + n*index;
+      coarse_hopp_PRECISION_vectorized( eta_pt, phi_pt, Dminus + 4*vectorized_link_offset*neighbor_index, l );
+    }
+  }
+#else
   config_PRECISION D = s->op.D;
-  int link_size = SQUARE(l->num_lattice_site_var), site_size=4*link_size;
+  int link_size = SQUARE(2*l->num_parent_eig_vect), site_size=4*link_size;
   
   for ( int mu=0; mu<4; mu++ ) {
     // plus mu direction
@@ -986,15 +1295,40 @@ void coarse_block_PRECISION_boundary_op( vector_PRECISION eta, vector_PRECISION 
       coarse_daggered_hopp_PRECISION( eta_pt, phi_pt, D_pt, l );
     }
   }
-}
 #endif
+}
 
-#ifndef OPTIMIZED_NEIGHBOR_COUPLING_PRECISION
+
 void n_coarse_block_PRECISION_boundary_op( vector_PRECISION eta, vector_PRECISION phi,
                                            int k, schwarz_PRECISION_struct *s, level_struct *l ) {
   // k: number of current block
   int *bbl = s->block_boundary_length, n = l->num_lattice_site_var;
-  int link_size = SQUARE(l->num_lattice_site_var), site_size=4*link_size;
+#ifdef VECTORIZE_COARSE_OPERATOR_PRECISION
+  int column_offset = SIMD_LENGTH_PRECISION*((2*l->num_parent_eig_vect+SIMD_LENGTH_PRECISION-1)/SIMD_LENGTH_PRECISION);
+  int vectorized_link_offset = 2*l->num_parent_eig_vect*column_offset;
+  
+  for ( int mu=0; mu<4; mu++ ) {
+    OPERATOR_TYPE_PRECISION *Dplus = s->op.D_vectorized + mu*vectorized_link_offset;
+    OPERATOR_TYPE_PRECISION *Dminus = s->op.D_transformed_vectorized + mu*vectorized_link_offset;
+    // plus mu direction
+    for ( int i=bbl[2*mu]; i<bbl[2*mu+1]; i+=2 ) {
+      int index = s->block[k].bt[i];
+      int neighbor_index = s->block[k].bt[i+1];
+      vector_PRECISION phi_pt = phi + n*neighbor_index;
+      vector_PRECISION eta_pt = eta + n*index;
+      coarse_n_hopp_PRECISION_vectorized( eta_pt, phi_pt, Dplus + 4*vectorized_link_offset*index, l );
+    }
+    // minus mu direction
+    for ( int i=bbl[2*mu+1]; i<bbl[2*mu+2]; i+=2 ) {
+      int index = s->block[k].bt[i];
+      int neighbor_index = s->block[k].bt[i+1];
+      vector_PRECISION phi_pt = phi + n*neighbor_index;
+      vector_PRECISION eta_pt = eta + n*index;
+      coarse_n_hopp_PRECISION_vectorized( eta_pt, phi_pt, Dminus + 4*vectorized_link_offset*neighbor_index, l );
+    }
+  }  
+#else
+  int link_size = SQUARE(2*l->num_parent_eig_vect), site_size=4*link_size;
   config_PRECISION D = s->op.D;
   
   for ( int mu=0; mu<4; mu++ ) {
@@ -1017,10 +1351,10 @@ void n_coarse_block_PRECISION_boundary_op( vector_PRECISION eta, vector_PRECISIO
       coarse_n_daggered_hopp_PRECISION( eta_pt, phi_pt, D_pt, l );
     }
   }
-}
 #endif
+}
 
-#if !defined(OPTIMIZED_NEIGHBOR_COUPLING_PRECISION) && !defined(OPTIMIZED_SELF_COUPLING_PRECISION)
+
 void schwarz_PRECISION_setup( schwarz_PRECISION_struct *s, operator_double_struct *op_in, level_struct *l ) {
 
 /*********************************************************************************  
@@ -1030,51 +1364,53 @@ void schwarz_PRECISION_setup( schwarz_PRECISION_struct *s, operator_double_struc
 *********************************************************************************/
 
   int i, index, n = l->num_inner_lattice_sites, *tt = s->op.translation_table;
-  config_PRECISION D_out_pt, clover_out_pt;
-  config_double D_in_pt = op_in->D, clover_in_pt = op_in->clover;
+  config_PRECISION D_out_pt, clover_out_pt, odd_proj_out_pt;
+  config_double D_in_pt = op_in->D, clover_in_pt = op_in->clover, odd_proj_in_pt = op_in->odd_proj;
   
+  s->op.m0 = op_in->m0;
+
   for ( i=0; i<n; i++ ) {
     index = tt[i];
     D_out_pt = s->op.D + 36*index;
-    FOR36( *D_out_pt = (complex_PRECISION) *D_in_pt; D_out_pt++; D_in_pt++; )
+    FOR36( *D_out_pt = (complex_PRECISION) *D_in_pt; D_out_pt++; D_in_pt++; );
   }
   
   if ( g.csw != 0 ) {
     for ( i=0; i<n; i++ ) {
       index = tt[i];
       clover_out_pt = s->op.clover + 42*index;
-      FOR42( *clover_out_pt = (complex_PRECISION) *clover_in_pt; clover_out_pt++; clover_in_pt++; )
+      FOR42( *clover_out_pt = (complex_PRECISION) *clover_in_pt; clover_out_pt++; clover_in_pt++; );
     }
   } else {
     for ( i=0; i<n; i++ ) {
       index = tt[i];
       clover_out_pt = s->op.clover + 12*index;
-      FOR12( *clover_out_pt = (complex_PRECISION) *clover_in_pt; clover_out_pt++; clover_in_pt++; )
+      FOR12( *clover_out_pt = (complex_PRECISION) *clover_in_pt; clover_out_pt++; clover_in_pt++; );
     }
-  }
-
-#ifdef HAVE_TM
-  config_PRECISION tm_term_out_pt, odd_proj_out_pt;
-  config_double tm_term_in_pt = op_in->tm_term, odd_proj_in_pt = op_in->odd_proj;
-  for ( i=0; i<n; i++ ) {
-    index = tt[i];
-    tm_term_out_pt = s->op.tm_term + 12*index;
-    FOR12( *tm_term_out_pt = (complex_PRECISION) *tm_term_in_pt; tm_term_out_pt++; tm_term_in_pt++; )
   }
 
   for ( i=0; i<n; i++ ) {
     index = tt[i];
     odd_proj_out_pt = s->op.odd_proj + 12*index;
-    FOR12( *odd_proj_out_pt = (complex_PRECISION) *odd_proj_in_pt; odd_proj_out_pt++; odd_proj_in_pt++; )
+    FOR12( *odd_proj_out_pt = (complex_PRECISION) *odd_proj_in_pt; odd_proj_out_pt++; odd_proj_in_pt++; );
   }
+
+#ifdef HAVE_TM
+  tm_term_PRECISION_setup( (PRECISION) (g.mu_factor[l->depth]*op_in->mu), (PRECISION) (g.mu_factor[l->depth]*op_in->mu_even_shift), (PRECISION) (g.mu_factor[l->depth]*op_in->mu_odd_shift), &(s->op), l, no_threading );
 #endif  
-  
-  if ( g.odd_even )
-    schwarz_PRECISION_oddeven_setup( &(s->op), l );
-  
-  schwarz_PRECISION_boundary_update( s, l );
-}
+
+#ifdef HAVE_TM1p1
+  epsbar_term_PRECISION_setup( (PRECISION) (g.epsbar_factor[l->depth]*op_in->epsbar), (PRECISION) (g.epsbar_factor[l->depth]*op_in->epsbar_ig5_even_shift), (PRECISION) (g.epsbar_factor[l->depth]*op_in->epsbar_ig5_odd_shift), &(s->op), l, no_threading );
 #endif
+
+  schwarz_PRECISION_boundary_update( s, l );
+  
+  operator_PRECISION_set_couplings( &(s->op), l );
+
+  if ( g.odd_even )
+    schwarz_PRECISION_oddeven_setup( s, l );
+
+}
 
 void additive_schwarz_PRECISION( vector_PRECISION phi, vector_PRECISION D_phi, vector_PRECISION eta, const int cycles, int res, 
                                  schwarz_PRECISION_struct *s, level_struct *l, struct Thread *threading ) {
@@ -1083,10 +1419,11 @@ void additive_schwarz_PRECISION( vector_PRECISION phi, vector_PRECISION D_phi, v
   
   int k, mu, i, nb = s->num_blocks;
   vector_PRECISION r = s->buf1, Dphi = s->buf4, latest_iter = s->buf2, x = s->buf3, latest_iter2 = s->buf5, swap = NULL;
-  void (*block_op)() = (l->depth==0)?block_d_plus_clover_PRECISION:coarse_block_operator_PRECISION,
-       (*boundary_op)() = (l->depth==0)?block_PRECISION_boundary_op:coarse_block_PRECISION_boundary_op,
+  void (*block_op)() = (l->depth==0)?block_d_plus_clover_PRECISION:coarse_block_operator_PRECISION;
+  void (*boundary_op)() = (l->depth==0)?block_PRECISION_boundary_op:coarse_block_PRECISION_boundary_op,
        (*n_boundary_op)() = (l->depth==0)?n_block_PRECISION_boundary_op:n_coarse_block_PRECISION_boundary_op,
-       (*block_solve)() = (l->depth==0&&g.odd_even)?block_solve_oddeven_PRECISION:local_minres_PRECISION;
+       (* block_solve)() = (l->depth==0&&g.odd_even)?block_solve_oddeven_PRECISION:local_minres_PRECISION;
+
 
   int nb_thread_start;
   int nb_thread_end;
@@ -1097,16 +1434,14 @@ void additive_schwarz_PRECISION( vector_PRECISION phi, vector_PRECISION D_phi, v
   if ( res == _NO_RES ) {
     vector_PRECISION_copy( r, eta, nb_thread_start*s->block_vector_size, nb_thread_end*s->block_vector_size, l );
     vector_PRECISION_define( x, 0, nb_thread_start*s->block_vector_size, nb_thread_end*s->block_vector_size, l );
+    START_MASTER(threading)
+    vector_PRECISION_define( x, 0, l->inner_vector_size, l->schwarz_vector_size, l );
+    END_MASTER(threading)
   } else {
     vector_PRECISION_copy( x, phi, nb_thread_start*s->block_vector_size, nb_thread_end*s->block_vector_size, l );
     vector_PRECISION_copy( latest_iter, phi, nb_thread_start*s->block_vector_size, nb_thread_end*s->block_vector_size, l );
   }
   
-  START_MASTER(threading)
-  if ( res == _NO_RES ) {
-    vector_PRECISION_define( x, 0, l->inner_vector_size, l->schwarz_vector_size, l );
-  }
-  END_MASTER(threading)
   
   SYNC_CORES(threading)
   
@@ -1132,7 +1467,7 @@ void additive_schwarz_PRECISION( vector_PRECISION phi, vector_PRECISION D_phi, v
             boundary_op( Dphi, latest_iter, i, s, l, no_threading );
             vector_PRECISION_minus( r, eta, Dphi, s->block[i].start*l->num_lattice_site_var,
                                     s->block[i].start*l->num_lattice_site_var+s->block_vector_size, l );
-          } else {
+        } else {
             n_boundary_op( r, latest_iter, i, s, l );
           }
         }
@@ -1248,9 +1583,9 @@ void additive_schwarz_PRECISION( vector_PRECISION phi, vector_PRECISION D_phi, v
       }
     }
   }
-  double rnorm = global_norm_PRECISION( r, 0, l->inner_vector_size, l, no_threading );
+  PRECISION r_norm = global_norm_PRECISION( r, 0, l->inner_vector_size, l, no_threading );
   char number[3]; sprintf( number, "%2d", 31+l->depth ); printf0("\033[1;%2sm|", number );
-  printf0(" ---- depth: %d, c: %d, schwarz iter %2d, norm: %11.6le |", l->depth, s->num_colors, k, rnorm );
+  printf0(" ---- depth: %d, c: %d, schwarz iter %2d, norm: %11.6le |", l->depth, s->num_colors, k, r_norm );
   printf0("\033[0m\n"); fflush(0);
   END_LOCKED_MASTER(threading)
 #endif
@@ -1269,15 +1604,12 @@ void red_black_schwarz_PRECISION( vector_PRECISION phi, vector_PRECISION D_phi, 
   vector_PRECISION Dphi = s->buf4;
   vector_PRECISION latest_iter = s->buf2;
   vector_PRECISION x = s->buf3;
-  void (*block_op)() = (l->depth==0)?block_d_plus_clover_PRECISION:coarse_block_operator_PRECISION,
-       (*boundary_op)() = (l->depth==0)?block_PRECISION_boundary_op:coarse_block_PRECISION_boundary_op,
+  void (*block_op)() = (l->depth==0)?block_d_plus_clover_PRECISION:coarse_block_operator_PRECISION;
+  void (*boundary_op)() = (l->depth==0)?block_PRECISION_boundary_op:coarse_block_PRECISION_boundary_op,
        (*n_boundary_op)() = (l->depth==0)?n_block_PRECISION_boundary_op:n_coarse_block_PRECISION_boundary_op,
        (*block_solve)() = (l->depth==0&&g.odd_even)?block_solve_oddeven_PRECISION:local_minres_PRECISION;
   void (*communicate[2])() = {ghost_update_wait_PRECISION, ghost_update_PRECISION};
   int commdir[8] = {+1,-1,-1,+1,-1,+1,+1,-1};
-#ifdef SCHWARZ_RES
-  int nb = s->num_blocks;
-#endif
        
   SYNC_CORES(threading)
        
@@ -1388,8 +1720,9 @@ void red_black_schwarz_PRECISION( vector_PRECISION phi, vector_PRECISION D_phi, 
       }
       if ( step == 0 || step == 1 ) {
         START_LOCKED_MASTER(threading)
-        for ( mu=0; mu<4; mu++ )
+        for ( mu=0; mu<4; mu++ ) {
           communicate[0]( latest_iter, mu, commdir[step], &(s->op.c), l );
+        }
         END_LOCKED_MASTER(threading)
       } else {
         SYNC_CORES(threading)
@@ -1399,6 +1732,7 @@ void red_black_schwarz_PRECISION( vector_PRECISION phi, vector_PRECISION D_phi, 
   SYNC_CORES(threading)
   
 #ifdef SCHWARZ_RES
+  int nb = s->num_blocks;
   START_LOCKED_MASTER(threading)
   if ( D_phi == NULL ) {
     for ( mu=0; mu<4; mu++ ) {
@@ -1406,26 +1740,23 @@ void red_black_schwarz_PRECISION( vector_PRECISION phi, vector_PRECISION D_phi, 
       ghost_update_PRECISION( latest_iter, mu, -1, &(s->op.c), l );
     }
     
-    for ( i=0; i<nb; i++ ) {
-      if ( s->block[i].no_comm ) {
+    for ( i=0; i<nb; i++ )
+      if ( s->block[i].no_comm )
         n_boundary_op( r, latest_iter, i, s, l );
-      }
-    }
     
     for ( mu=0; mu<4; mu++ ) {
       ghost_update_wait_PRECISION( latest_iter, mu, +1, &(s->op.c), l );
       ghost_update_wait_PRECISION( latest_iter, mu, -1, &(s->op.c), l );
     }
     
-    for ( i=0; i<nb; i++ ) {
-      if ( !s->block[i].no_comm ) {
+    for ( i=0; i<nb; i++ )
+      if ( !s->block[i].no_comm )
         n_boundary_op( r, latest_iter, i, s, l );
-      }
-    }
+
   }
-  double rnorm = global_norm_PRECISION( r, 0, l->inner_vector_size, l, no_threading );
+  PRECISION r_norm = global_norm_PRECISION( r, 0, l->inner_vector_size, l, no_threading );
   char number[3]; sprintf( number, "%2d", 31+l->depth ); printf0("\033[1;%2sm|", number );
-  printf0(" ---- depth: %d, c: %d, schwarz iter %2d, norm: %11.6le |", l->depth, s->num_colors, k, rnorm );
+  printf0(" ---- depth: %d, c: %d, schwarz iter %2d, norm: %11.6le |", l->depth, s->num_colors, k, r_norm );
   printf0("\033[0m\n"); fflush(0);
   END_LOCKED_MASTER(threading)
 #endif
@@ -1443,8 +1774,8 @@ void schwarz_PRECISION( vector_PRECISION phi, vector_PRECISION D_phi, vector_PRE
   vector_PRECISION Dphi = s->buf4;
   vector_PRECISION latest_iter = s->buf2;
   vector_PRECISION x = s->buf3;
-  void (*block_op)() = (l->depth==0)?block_d_plus_clover_PRECISION:coarse_block_operator_PRECISION,
-       (*boundary_op)() = (l->depth==0)?block_PRECISION_boundary_op:coarse_block_PRECISION_boundary_op,
+  void (*block_op)() = (l->depth==0)?block_d_plus_clover_PRECISION:coarse_block_operator_PRECISION;
+  void (*boundary_op)() = (l->depth==0)?block_PRECISION_boundary_op:coarse_block_PRECISION_boundary_op,
        (*n_boundary_op)() = (l->depth==0)?n_block_PRECISION_boundary_op:n_coarse_block_PRECISION_boundary_op,
        (*block_solve)() = (l->depth==0&&g.odd_even)?block_solve_oddeven_PRECISION:local_minres_PRECISION;
   
@@ -1623,26 +1954,24 @@ void schwarz_PRECISION( vector_PRECISION phi, vector_PRECISION D_phi, vector_PRE
       ghost_update_PRECISION( latest_iter, mu, -1, &(s->op.c), l );
     }
     
-    for ( i=0; i<nb; i++ ) {
-      if ( s->block[i].no_comm ) {
+    for ( i=0; i<nb; i++ )
+      if ( s->block[i].no_comm ) 
         n_boundary_op( r, latest_iter, i, s, l );
-      }
-    }
+
     
     for ( mu=0; mu<4; mu++ ) {
       ghost_update_wait_PRECISION( latest_iter, mu, +1, &(s->op.c), l );
       ghost_update_wait_PRECISION( latest_iter, mu, -1, &(s->op.c), l );
     }
     
-    for ( i=0; i<nb; i++ ) {
-      if ( !s->block[i].no_comm ) {
+    for ( i=0; i<nb; i++ )
+      if ( !s->block[i].no_comm ) 
         n_boundary_op( r, latest_iter, i, s, l );
-      }
-    }
   }
-  double rnorm = global_norm_PRECISION( r, 0, l->inner_vector_size, l, no_threading );
+
+  PRECISION r_norm = global_norm_PRECISION( r, 0, l->inner_vector_size, l, no_threading );
   char number[3]; sprintf( number, "%2d", 31+l->depth ); printf0("\033[1;%2sm|", number );
-  printf0(" ---- depth: %d, c: %d, schwarz iter %2d, norm: %11.6le |", l->depth, s->num_colors, k, rnorm );
+  printf0(" ---- depth: %d, c: %d, schwarz iter %2d, norm: %11.6le |", l->depth, s->num_colors, k, r_norm );
   printf0("\033[0m\n"); fflush(0);
   END_LOCKED_MASTER(threading)
 #endif
@@ -1661,10 +1990,10 @@ void sixteen_color_schwarz_PRECISION( vector_PRECISION phi, vector_PRECISION D_p
   else {
     int color, k, mu, i, nb = s->num_blocks;
     vector_PRECISION r = s->buf1, Dphi = s->buf4, latest_iter = s->buf2, x = s->buf3;
-    void (*block_op)() = (l->depth==0)?block_d_plus_clover_PRECISION:coarse_block_operator_PRECISION,
-        (*boundary_op)() = (l->depth==0)?block_PRECISION_boundary_op:coarse_block_PRECISION_boundary_op,
-        (*n_boundary_op)() = (l->depth==0)?n_block_PRECISION_boundary_op:n_coarse_block_PRECISION_boundary_op,
-        (*block_solve)() = (l->depth==0&&g.odd_even)?block_solve_oddeven_PRECISION:local_minres_PRECISION;
+    void (*block_op)() = (l->depth==0)?block_d_plus_clover_PRECISION:coarse_block_operator_PRECISION;
+    void (*boundary_op)() = (l->depth==0)?block_PRECISION_boundary_op:coarse_block_PRECISION_boundary_op,
+         (*n_boundary_op)() = (l->depth==0)?n_block_PRECISION_boundary_op:n_coarse_block_PRECISION_boundary_op,
+         (*block_solve)() = (l->depth==0&&g.odd_even)?block_solve_oddeven_PRECISION:local_minres_PRECISION;
         
     int color_to_comm[16][2] = { {T,-1}, {X,+1}, {Y,+1}, {X,-1}, {Z,+1}, {Y,-1}, {X,+1}, {Y,+1},
                                 {T,+1}, {X,-1}, {Y,-1}, {X,+1}, {Z,-1}, {Y,+1}, {X,-1}, {Y,-1}  };
@@ -1773,8 +2102,11 @@ void sixteen_color_schwarz_PRECISION( vector_PRECISION phi, vector_PRECISION D_p
 #ifdef SCHWARZ_RES
     START_LOCKED_MASTER(threading)
     vector_PRECISION true_r = NULL;
+
     PUBLIC_MALLOC( true_r, complex_PRECISION, l->vector_size );
     vector_PRECISION_define( true_r, 0, 0, l->inner_vector_size, l );
+
+
     if ( D_phi == NULL ) {
       for ( mu=0; mu<4; mu++ ) {
         ghost_update_PRECISION( x, mu, +1, &(s->op.c), l );
@@ -1792,10 +2124,11 @@ void sixteen_color_schwarz_PRECISION( vector_PRECISION phi, vector_PRECISION D_p
       }
     }
     vector_PRECISION_saxpy( true_r, eta, true_r, -1, 0, l->inner_vector_size, l );
-    double rnorm = global_norm_PRECISION( true_r, 0, l->inner_vector_size, l, no_threading )
-                 / global_norm_PRECISION( eta, 0, l->inner_vector_size, l, no_threading );
+    PRECISION r_norm = global_norm_PRECISION( true_r, 0, l->inner_vector_size, l, no_threading ),
+      den = global_norm_PRECISION( eta, 0, l->inner_vector_size, l, no_threading );
+    r_norm/=den;
     char number[3]; sprintf( number, "%2d", 31+l->depth ); printf0("\033[1;%2sm|", number );
-    printf0(" ---- depth: %d, c: %d, schwarz iter %2d, norm: %11.6le |", l->depth, s->num_colors, k, rnorm );
+    printf0(" ---- depth: %d, c: %d, schwarz iter %2d, norm: %11.6le |", l->depth, s->num_colors, k, r_norm );
     printf0("\033[0m\n"); fflush(0);
     PUBLIC_FREE( true_r, complex_PRECISION, l->vector_size );
     END_LOCKED_MASTER(threading)
@@ -1816,6 +2149,16 @@ void trans_PRECISION( vector_PRECISION out, vector_double in, int *tt, level_str
   // this function seems to do some data reordering, barriers ensure that everything is in sync
   SYNC_CORES(threading)
   START_NO_HYPERTHREADS(threading)
+#ifdef HAVE_TM1p1
+  if( g.n_flavours == 2 )
+    for ( i=start; i<end; i++ ) {
+      index = tt[i];
+      out_pt = out + 24*index;
+      in_pt  = in + 24*i;
+      FOR24( *out_pt = (complex_PRECISION) *in_pt; out_pt++; in_pt++; )
+    }
+  else
+#endif
   for ( i=start; i<end; i++ ) {
     index = tt[i];
     out_pt = out + 12*index;
@@ -1837,6 +2180,16 @@ void trans_back_PRECISION( vector_double out, vector_PRECISION in, int *tt, leve
   // this function seems to do some data reordering, barriers ensure that everything is in sync
   SYNC_CORES(threading)
   START_NO_HYPERTHREADS(threading)
+#ifdef HAVE_TM1p1
+  if( g.n_flavours == 2 )
+    for ( i=start; i<end; i++ ) {
+      index = tt[i];
+      in_pt = in + 24*index;
+      out_pt = out + 24*i;
+      FOR24( *out_pt = (complex_double) *in_pt; out_pt++; in_pt++; )
+    }
+  else
+#endif
   for ( i=start; i<end; i++ ) {
     index = tt[i];
     in_pt = in + 12*index;
@@ -1861,42 +2214,46 @@ void schwarz_PRECISION_mvm_testfun( schwarz_PRECISION_struct *s, level_struct *l
   START_UNTHREADED_FUNCTION(threading)
 
   int mu, i, nb = s->num_blocks;
+  int svs = l->schwarz_vector_size;
+  int ivs = l->inner_vector_size;
+  int vs = l->vector_size;
+
   void (*block_op)() = (l->depth==0)?block_d_plus_clover_PRECISION:coarse_block_operator_PRECISION;
-  void (*boundary_op)() = (l->depth==0)?block_PRECISION_boundary_op:coarse_block_PRECISION_boundary_op;
   void (*op)() = (l->depth==0)?d_plus_clover_PRECISION:apply_coarse_operator_PRECISION;
+  void (*boundary_op)() = (l->depth==0)?block_PRECISION_boundary_op:coarse_block_PRECISION_boundary_op;
   
   vector_PRECISION v1 = NULL, v2 = NULL, v3 = NULL;
-  PRECISION norm;
+  PRECISION diff;
   
-  MALLOC( v1, complex_PRECISION, l->schwarz_vector_size );
-  MALLOC( v2, complex_PRECISION, l->vector_size );
-  MALLOC( v3, complex_PRECISION, l->vector_size );
-  
-  vector_PRECISION_define_random( v1, 0, l->inner_vector_size, l );
-  
+  MALLOC( v1, complex_PRECISION, svs );
+  MALLOC( v2, complex_PRECISION, vs );
+  MALLOC( v3, complex_PRECISION, vs );
+
+  vector_PRECISION_define_random( v1, 0, ivs, l );
+
   op( v3, v1, &(s->op), l, no_threading );
-  
+
   for ( mu=0; mu<4; mu++ ) {
     ghost_update_PRECISION( v1, mu, +1, &(s->op.c), l );
     ghost_update_PRECISION( v1, mu, -1, &(s->op.c), l );
   }
-  
+      
   for ( mu=0; mu<4; mu++ ) {
     ghost_update_wait_PRECISION( v1, mu, +1, &(s->op.c), l );
     ghost_update_wait_PRECISION( v1, mu, -1, &(s->op.c), l );
   }
-  
+
   for ( i=0; i<nb; i++ ) {
     block_op( v2, v1, s->block[i].start*l->num_lattice_site_var, s, l, no_threading );
     boundary_op( v2, v1, i, s, l, no_threading );
   }
-  
+
   vector_PRECISION_minus( v3, v3, v2, 0, l->inner_vector_size, l );  
-  norm = global_norm_PRECISION( v3, 0, l->inner_vector_size, l, no_threading )/global_norm_PRECISION( v2, 0, l->inner_vector_size, l, no_threading );
+  diff = global_norm_PRECISION( v3, 0, l->inner_vector_size, l, no_threading ) /
+    global_norm_PRECISION( v2, 0, l->inner_vector_size, l, no_threading );
   
-  printf0("depth: %d, correctness of local residual vector: %le\n", l->depth, norm );
-  if(norm > g.test) g.test = norm;
-    
+  test0_PRECISION("depth: %d, correctness of local residual vector: %le\n", l->depth, diff );
+      
   FREE( v1, complex_PRECISION, l->schwarz_vector_size );
   FREE( v2, complex_PRECISION, l->vector_size );
   FREE( v3, complex_PRECISION, l->vector_size );

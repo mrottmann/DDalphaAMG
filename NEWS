@@ -1,9 +1,25 @@
-Version v1606-sbacchio/master:
-  -Twisted mass fermions operator for Nf=2
-  -Support of different shift on even and odd sites
+
+
+Version v1610 - TM Nf=2+1+1:
+
+  - Twisted mass fermions operator for Nf=1+1
+  - Aupport of different shift on even and odd sites
   -Personalized version of the library
+  - Following parameters have been added to input file:
+    -- //TODO
+
+
+Version v1606 - TM Nf=2:
+
+  - Twisted mass fermions operator for Nf=2
+  - A different TM shift can be applied on even and odd sites
+  - Personalized version of the library
+  - Following parameters have been added to input file:
+    -- //TODO
+
 
 Version v1606 - first release:
+
   This is the first release of the DDalphaAMG solver library.
   For an overview of its features included, please consult the
   user documentation in /doc.

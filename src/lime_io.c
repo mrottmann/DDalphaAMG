@@ -33,7 +33,7 @@ typedef struct lime_fileinfo {
  *  LIME functions
  *                                                                                   
  * In DDalphaAMG format:     
- ** t slowest running index	         
+ ** t slowest running index           
  ** x fastest running index            
  ** all positive directions                
  ** ordering: +T,+Z,+Y,+X         
@@ -502,7 +502,7 @@ void lime_write_vector( double *phi, char *filename ) {
         }
   }
   
-  if ( g.my_rank == 0 ) {	
+  if ( g.my_rank == 0 ) {  
     for ( i=0; i<bar_size; i++ ) {
       byteswap8( (char *) ( buffer_pt->data + i ) );
     }

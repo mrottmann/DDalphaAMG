@@ -47,7 +47,6 @@ void fgmres_MP_struct_alloc( int m, int n, int vl, double tol, const int prec_ki
                                  
   p->dp.print = g.vt.evaluation?0:1;             p->sp.print = g.vt.evaluation?0:1;
   p->dp.initial_guess_zero = 1;                  p->sp.initial_guess_zero = 1;
-  p->dp.shift = 0;                               p->sp.shift = 0;
   p->dp.v_start = 0;                             p->sp.v_start = 0;
   p->dp.v_end = l->inner_vector_size;            p->sp.v_end = l->inner_vector_size;
   
@@ -60,6 +59,10 @@ void fgmres_MP_struct_alloc( int m, int n, int vl, double tol, const int prec_ki
     g.p.eval_operator = d_plus_clover_double;
   }
   
+#ifdef HAVE_TM1p1
+  vl*=2;
+#endif
+
   // double precision part
   total = 0;
   total += (m+1)*m; // Hessenberg matrix
@@ -220,8 +223,7 @@ int fgmres_MP( gmres_MP_struct *p, level_struct *l, struct Thread *threading ) {
     // inner loop in single precision
     for( il=0; il<p->dp.restart_length && finish==0; il++) {
       j = il; iter++;
-      arnoldi_step_MP( p->sp.V, p->sp.Z, p->sp.w, p->dp.H, p->dp.y, j, p->sp.preconditioner,
-                       p->sp.shift, &(p->sp), l, threading );
+      arnoldi_step_MP( p->sp.V, p->sp.Z, p->sp.w, p->dp.H, p->dp.y, j, p->sp.preconditioner, &(p->sp), l, threading );
       
       if ( cabs( p->dp.H[j][j+1] ) > 1E-15 ) {
         qr_update_double( p->dp.H, p->dp.s, p->dp.c, p->dp.gamma, j, l, threading );
@@ -316,8 +318,7 @@ int fgmres_MP( gmres_MP_struct *p, level_struct *l, struct Thread *threading ) {
 
 void arnoldi_step_MP( vector_float *V, vector_float *Z, vector_float w,
                       complex_double **H, complex_double* buffer, int j, void (*prec)(),
-                      complex_float shift, gmres_float_struct *p, level_struct *l,
-                      struct Thread *threading ) {
+                      gmres_float_struct *p, level_struct *l, struct Thread *threading ) {
   
   SYNC_MASTER_TO_ALL(threading)
   SYNC_CORES(threading)
@@ -332,7 +333,6 @@ void arnoldi_step_MP( vector_float *V, vector_float *Z, vector_float w,
   if ( prec != NULL ) {
     if ( p->kind == _LEFT ) {
       apply_operator_float( Z[0], V[j], p, l, threading );
-      if ( shift ) vector_float_saxpy( Z[0], Z[0], V[j], shift, start, end, l );
       prec( w, NULL, Z[0], _NO_RES, l, threading );
     } else {
       if ( g.mixed_precision == 2 && (g.method >= 1 && g.method <= 2 ) ) {
@@ -342,11 +342,9 @@ void arnoldi_step_MP( vector_float *V, vector_float *Z, vector_float w,
         prec( Z[j], NULL, V[j], _NO_RES, l, threading );
         apply_operator_float( w, Z[j], p, l, threading ); // w = D*Z[j]
       }
-      if ( shift ) vector_float_saxpy( w, w, Z[j], shift, start, end, l );
     }
   } else {
     apply_operator_float( w, V[j], p, l, threading ); // w = D*V[j]
-    if ( shift ) vector_float_saxpy( w, w, V[j], shift, start, end, l );
   }
 
   complex_double tmp[j+1];

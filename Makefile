@@ -2,8 +2,8 @@
 CC = mpiicc 
 
 # --- CFLAGS -----------------------------------------
-CFLAGS_gnu = -std=gnu99 -Wall -pedantic -fopenmp -O3 -ffast-math -msse4.2
-CFLAGS_intel = -std=gnu99 -Wall -pedantic -qopenmp -O3  -xHOST
+CFLAGS_gnu = -std=gnu99 -Wall -pedantic -O3 -ffast-math -msse4.2 #-fopenmp 
+CFLAGS_intel = -std=gnu99 -Wall -pedantic -O3  -xHOST #-qopenmp 
 CFLAGS = $(CFLAGS_intel)
 
 # --- DO NOT CHANGE -----------------------------------
@@ -45,8 +45,8 @@ LIMELIB= -L$(LIMEDIR)/lib -llime
 # -DPARAMOUTPUT -DTRACK_RES -DFGMRES_RESTEST -DPROFILING
 # -DSINGLE_ALLREDUCE_ARNOLDI
 # -DCOARSE_RES -DSCHWARZ_RES -DTESTVECTOR_ANALYSIS -DDEBUG
-OPT_VERSION_FLAGS = $(CFLAGS) $(LIMEFLAGS) $(H5FLAGS) -DOPENMP -DSSE -DPARAMOUTPUT -DTRACK_RES
-DEVEL_VERSION_FLAGS = $(CFLAGS) $(LIMEFLAGS) -DOPENMP -DSSE -DDEBUG -DPARAMOUTPUT -DTRACK_RES -DFGMRES_RESTEST -DPROFILING -DCOARSE_RES -DSCHWARZ_RES -DTESTVECTOR_ANALYSIS
+OPT_VERSION_FLAGS = $(CFLAGS) $(LIMEFLAGS) $(H5FLAGS) -DPARAMOUTPUT -DTRACK_RES -DSSE #-DOPENMP
+DEVEL_VERSION_FLAGS = $(CFLAGS) $(LIMEFLAGS) -DDEBUG -DPARAMOUTPUT -DTRACK_RES -DFGMRES_RESTEST -DPROFILING -DCOARSE_RES -DSCHWARZ_RES -DTESTVECTOR_ANALYSIS -DSSE #-DOPENMP
 
 
 all: execs library exec-tests
@@ -92,10 +92,10 @@ $(INCDIR)/%: $(SRCDIR)/%
 	cp $(SRCDIR)/`basename $@` $@
 
 $(BUILDDIR)/%.o: $(GSRCDIR)/%.c $(SRCDIR)/*.h
-	$(CC) $(CFLAGS) $(OPT_VERSION_FLAGS) -c $< -o $@
+	$(CC) $(OPT_VERSION_FLAGS) -c $< -o $@
 
 $(BUILDDIR)/%_devel.o: $(GSRCDIR)/%.c $(SRCDIR)/*.h
-	$(CC) -g $(CFLAGS) $(DEVEL_VERSION_FLAGS) -c $< -o $@
+	$(CC) -g $(DEVEL_VERSION_FLAGS) -c $< -o $@
 
 $(GSRCDIR)/%.h: $(SRCDIR)/%.h $(firstword $(MAKEFILE_LIST))
 	cp $< $@

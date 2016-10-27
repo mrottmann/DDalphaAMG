@@ -24,8 +24,22 @@
 
 void test_routine( level_struct *l, struct Thread *threading ) {
 
-  g.test = 0;
-  if ( g.method > 0 ) {
+  if ( g.method >= 0 ) {
+    START_MASTER(threading)
+    g.test = 0;
+    if ( l->depth == 0 ) {
+#ifdef HAVE_TM1p1
+      if( g.n_flavours==2 )
+        printf0("\nRunning tests with D = TM doublet operator:\n");
+      else
+#endif
+#ifdef HAVE_TM
+        printf0("\nRunning tests with D = TM Wilson operator:\n");
+#else
+      printf0("\nRunning tests with D = Wilson operator:\n");
+#endif
+    }
+    END_MASTER(threading)
     if ( g.mixed_precision ) {
       operator_float_test_routine( &(l->s_float.op), l, threading );
       if ( g.method > 0 && g.method < 4 ) schwarz_float_mvm_testfun( &(l->s_float), l, threading );
@@ -36,25 +50,69 @@ void test_routine( level_struct *l, struct Thread *threading ) {
       if ( g.method > 0 && g.method < 4 && g.odd_even ) block_oddeven_double_test( l, threading );
     }
     
-    if ( g.interpolation ) {
+    if ( g.interpolation && g.method > 0 ) {
       if ( g.mixed_precision )
         coarse_operator_float_test_routine( l, threading );
       else
         coarse_operator_double_test_routine( l, threading );
     }
+    START_MASTER(threading)
+    if (g.test < 1e-5)
+      printf0("TESTS passed, highest error %e < 1e-5\n", g.test);
+    else
+      warning0("some TESTS not passed, highest error %e > 1e-5\n", g.test);
+    printf0("\n");
+    END_MASTER(threading)
   }
 
-  START_LOCKED_MASTER(threading)
-  if (g.test < 1e-5)
-    printf0("TESTS passed, max error %e < 1e-5", g.test);
-  else
-    warning0("some TEST not passed, max error %e > 1e-5", g.test);
-  printf0("\n");
-  prof_init( l );
-  END_LOCKED_MASTER(threading)
 
-  if ( g.restart > 0 )
-    rhs_define( g.p.b, l, threading );
+#ifdef HAVE_TM1p1
+  if( g.n_flavours==1 &&
+      (g.epsbar != 0 || g.epsbar_ig5_odd_shift != 0 || g.epsbar_ig5_odd_shift != 0) ) {
+    
+    if ( g.method >= 0 ) {
+      START_MASTER(threading)
+      g.test = 0;
+      printf0("Running tests with D = TM doublet operator:\n");
+      END_MASTER(threading)
+
+      data_layout_n_flavours( 2, l, threading );
+      
+      if ( g.mixed_precision ) 
+        two_flavours_test_float( &(l->s_float.op), l, threading ); 
+      else 
+        two_flavours_test_double( &(l->s_double.op), l, threading ); 
+      
+      if ( g.mixed_precision ) {
+        operator_float_test_routine( &(l->s_float.op), l, threading );
+        if ( g.method > 0 && g.method < 4 ) schwarz_float_mvm_testfun( &(l->s_float), l, threading );
+        if ( g.method > 0 && g.method < 4 && g.odd_even ) block_oddeven_float_test( l, threading );
+      } else {
+        operator_double_test_routine( &(l->s_double.op), l, threading );
+        if ( g.method > 0 && g.method < 4 ) schwarz_double_mvm_testfun( &(l->s_double), l, threading );
+        if ( g.method > 0 && g.method < 4 && g.odd_even ) block_oddeven_double_test( l, threading );
+      }
+      
+      if ( g.interpolation  && g.method > 0 ) {
+        if ( g.mixed_precision )
+          coarse_operator_float_test_routine( l, threading );
+        else
+          coarse_operator_double_test_routine( l, threading );
+      }
+     
+      START_MASTER(threading)
+      if (g.test < 1e-5)
+        printf0("TESTS passed, highest error %e < 1e-5\n", g.test);
+      else
+        warning0("some TESTS not passed, highest error %e > 1e-5\n", g.test);
+      printf0("\n");
+      END_MASTER(threading)
+      
+      data_layout_n_flavours( 1, l, threading );
+    }
+  }
+#endif
+
 }
 
 

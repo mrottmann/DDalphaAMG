@@ -75,7 +75,7 @@ int main( int argc, char **argv ) {
   commonthreaddata = (struct common_thread_data *)malloc(sizeof(struct common_thread_data));
   init_common_thread_data(commonthreaddata);
   
-#pragma omp parallel num_threads(g.num_openmp_processes)
+  THREADED(g.num_openmp_processes)
   {
     struct Thread threading;
     setup_threading(&threading, commonthreaddata, &l);

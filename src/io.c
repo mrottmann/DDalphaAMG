@@ -373,7 +373,7 @@ unsigned int initFile( char *filename, const int mode, level_struct *l ) {
     lls[1] = l->local_lattice[1];
     lls[2] = l->local_lattice[2];
     lls[3] = l->local_lattice[0];
-    writeSmallDataset_double(configgroup_id, "m0", l->real_shift);
+    writeSmallDataset_double(configgroup_id, "m0", g.m0);
     writeSmallDataset_double(configgroup_id, "csw", g.csw);
     writeSmallDataset_double(configgroup_id, "plaquette_clov", g.plaq_clov);
     writeSmallDataset_double(configgroup_id, "plaquette_hopp", g.plaq_hopp);
@@ -548,7 +548,7 @@ void write_header_mg( FILE **file, double *lambda, char* vector_type, int n, lev
   fprintf( *file, "<header>\n" );
   fprintf( *file, "%s\n", vector_type );
   fprintf( *file, "clifford basis: %s\n", CLIFFORD_BASIS );
-  fprintf( *file, "m0: %.14lf\n", l->real_shift );
+  fprintf( *file, "m0: %.14lf\n", g.m0 );
   fprintf( *file, "csw: %.14lf\n", g.csw );
   fprintf( *file, "clov plaq: %.14lf\n", g.plaq_clov );
   fprintf( *file, "hopp plaq: %.14lf\n", g.plaq_hopp );

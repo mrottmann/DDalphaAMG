@@ -44,19 +44,13 @@ void next_level_setup( vector_double *V, level_struct *l, struct Thread *threadi
     // define next level parameters
     l->next_level->level = l->level-1;
     l->next_level->depth = l->depth+1;
-    l->next_level->real_shift = l->real_shift;
-    l->next_level->dirac_shift = l->dirac_shift;
-#ifdef HAVE_TM
-    l->next_level->tm_shift = g.tm_mu*g.tm_mu_factor[l->next_level->depth];
-    l->next_level->tm_even_shift = g.tm_mu_even_shift*g.tm_mu_factor[l->next_level->depth];
-    l->next_level->tm_odd_shift = g.tm_mu_odd_shift*g.tm_mu_factor[l->next_level->depth]; 
-#endif
     l->next_level->tol = l->tol;
     l->next_level->post_smooth_iter = g.post_smooth_iter[l->depth+1];
     l->next_level->relax_fac = g.relax_fac[l->depth+1];
     l->next_level->block_iter = g.block_iter[l->depth+1];
     l->next_level->setup_iter = g.setup_iter[l->depth+1];
     l->next_level->num_eig_vect = l->level==1?l->num_eig_vect:g.num_eig_vect[l->depth+1];
+    l->next_level->num_parent_eig_vect = l->num_eig_vect;
     l->next_level->num_lattice_site_var = 2 * l->num_eig_vect;
     l->next_level->n_cy = g.ncycle[l->depth+1];
     l->next_level->global_lattice = g.global_lattice[l->depth+1];
@@ -118,7 +112,9 @@ void next_level_setup( vector_double *V, level_struct *l, struct Thread *threadi
     }
   }
   
+  START_LOCKED_MASTER(threading)
   if ( l->depth == 0 ) printf0("\ninitial coarse grid correction is defined\n");
+  END_LOCKED_MASTER(threading)
 }
 
 
@@ -142,8 +138,8 @@ void method_setup( vector_double *V, level_struct *l, struct Thread *threading )
   double t0=0, t1=0;
   
   START_LOCKED_MASTER(threading)
+  g.in_setup = 1;
   if ( g.vt.evaluation ) {
-    l->dirac_shift = l->real_shift;
     l->level = g.num_levels-1;
   }
   
@@ -160,8 +156,13 @@ void method_setup( vector_double *V, level_struct *l, struct Thread *threading )
                               g.tol, _RIGHT, vcycle_float, &(g.p_MP), l );
       g.p.op = &(g.op_double);
 #if defined(INIT_ONE_PREC) && (defined (DEBUG) || defined (TEST_VECTOR_ANALYSIS))
+#ifdef HAVE_TM1p1
+      MALLOC( g.p.b, complex_double, 2*l->inner_vector_size );
+      MALLOC( g.p.x, complex_double, 2*l->inner_vector_size );
+#else
       MALLOC( g.p.b, complex_double, l->inner_vector_size );
       MALLOC( g.p.x, complex_double, l->inner_vector_size );
+#endif
 #endif
 #ifdef INIT_ONE_PREC
     } else {
@@ -181,8 +182,13 @@ void method_setup( vector_double *V, level_struct *l, struct Thread *threading )
                               g.tol, _NOTHING, NULL, &(g.p_MP), l );
       g.p.op = &(g.op_double);
 #if defined(INIT_ONE_PREC) && (defined (DEBUG) || defined (TEST_VECTOR_ANALYSIS))
+#ifdef HAVE_TM1p1
+      MALLOC( g.p.b, complex_double, 2*l->inner_vector_size );
+      MALLOC( g.p.x, complex_double, 2*l->inner_vector_size );
+#else
       MALLOC( g.p.b, complex_double, l->inner_vector_size );
       MALLOC( g.p.x, complex_double, l->inner_vector_size );
+#endif
 #endif
 #ifdef INIT_ONE_PREC
     } else {
@@ -246,19 +252,26 @@ void method_setup( vector_double *V, level_struct *l, struct Thread *threading )
     }
     if ( g.method >=0  )
       printf0("|          restart length: %-3d                             |\n", g.restart );
-    printf0("|                      m0: %+9.6lf                       |\n", creal(l->dirac_shift) );
-    if(g.setup_m0!=l->dirac_shift)
+    printf0("|                      m0: %+9.6lf                       |\n", g.m0 );
+    if(g.setup_m0!=g.m0)
       printf0("|                setup m0: %+9.6lf                       |\n", g.setup_m0 );
     printf0("|                     csw: %+9.6lf                       |\n", g.csw );
 #ifdef HAVE_TM
-    printf0("|                      mu: %+9.6lf                       |\n", g.tm_mu);
-    if(g.setup_tm_mu!=g.tm_mu)
-      printf0("|                setup mu: %+9.6lf                       |\n", g.setup_tm_mu );
-    if(g.tm_mu_odd_shift!=0.)
-      printf0("|         mu on odd sites: %+9.6lf                       |\n", g.tm_mu + g.tm_mu_odd_shift );
-    if(g.tm_mu_even_shift!=0.)
-      printf0("|        mu on even sites: %+9.6lf                       |\n", g.tm_mu + g.tm_mu_even_shift );
-    
+    printf0("|                      mu: %+9.6lf                       |\n", g.mu);
+    if(g.setup_mu!=g.mu)
+      printf0("|                setup mu: %+9.6lf                       |\n", g.setup_mu );
+    if(g.mu_odd_shift!=0.)
+      printf0("|         mu on odd sites: %+9.6lf                       |\n", g.mu + g.mu_odd_shift );
+    if(g.mu_even_shift!=0.)
+      printf0("|        mu on even sites: %+9.6lf                       |\n", g.mu + g.mu_even_shift );
+#endif
+#ifdef HAVE_TM1p1
+    if(g.epsbar)
+      printf0("|                  epsbar: %+9.6lf                       |\n", g.epsbar);
+    if(g.epsbar_ig5_odd_shift!=0.)
+      printf0("|    ig5 epsbar odd sites: %+9.6lf                       |\n", g.epsbar_ig5_odd_shift );
+    if(g.epsbar_ig5_even_shift!=0.)
+      printf0("|   ig5 epsbar even sites: %+9.6lf                       |\n", g.epsbar_ig5_even_shift );
 #endif
     if ( g.method > 0 ) {
       printf0("+----------------------------------------------------------+\n");
@@ -285,13 +298,20 @@ void method_setup( vector_double *V, level_struct *l, struct Thread *threading )
           printf0("|               tolerance: %-5.0le                           |\n", g.coarse_tol );
         }
 #ifdef HAVE_TM
-	if( g.tm_mu!=0. && g.tm_mu_factor[i]!=1 )
-	  printf0("|                      mu: %+9.6lf                       |\n", g.tm_mu * g.tm_mu_factor[i]);
-	if( g.tm_mu_odd_shift!=0. && g.tm_mu_factor[i]!=1 )
-	  printf0("|         mu on odd sites: %+9.6lf                       |\n", (g.tm_mu + g.tm_mu_odd_shift) * g.tm_mu_factor[i] );
-	if( g.tm_mu_even_shift!=0. && g.tm_mu_factor[i]!=1 )
-	  printf0("|        mu on even sites: %+9.6lf                       |\n", (g.tm_mu + g.tm_mu_even_shift) * g.tm_mu_factor[i] );
-    
+        if( g.mu!=0. && g.mu_factor[i]!=1 )
+          printf0("|                      mu: %+9.6lf                       |\n", g.mu * g.mu_factor[i]);
+        if( g.mu_odd_shift!=0. && g.mu_factor[i]!=1 )
+          printf0("|         mu on odd sites: %+9.6lf                       |\n", (g.mu + g.mu_odd_shift) * g.mu_factor[i] );
+        if( g.mu_even_shift!=0. && g.mu_factor[i]!=1 )
+          printf0("|        mu on even sites: %+9.6lf                       |\n", (g.mu + g.mu_even_shift) * g.mu_factor[i] );
+#endif
+#ifdef HAVE_TM1p1
+        if( g.epsbar!=0. && g.epsbar_factor[i]!=1 )
+          printf0("|                 epsbar: %+9.6lf                       |\n", g.epsbar);
+        if(g.epsbar_ig5_odd_shift!=0. && g.epsbar_factor[i]!=1)
+          printf0("|  ig5 epsbar on odd sites: %+9.6lf                     |\n", g.epsbar + g.epsbar_ig5_odd_shift );
+        if(g.epsbar_ig5_even_shift!=0. && g.epsbar_factor[i]!=1)
+          printf0("| ig5 epsbar on even sites: %+9.6lf                     |\n", g.epsbar + g.epsbar_ig5_even_shift );
 #endif
       }
     }
@@ -305,15 +325,17 @@ void method_setup( vector_double *V, level_struct *l, struct Thread *threading )
     printf0("\n");
   }
 #endif
+  g.in_setup = 0;
   END_LOCKED_MASTER(threading)  
+
+  START_LOCKED_MASTER(threading)
+  if ( l->depth==0 && g.method >=0 )
+    prof_print( l );
+  END_LOCKED_MASTER(threading)
   
 #ifdef DEBUG
   test_routine( l, threading );
 #endif
-  START_LOCKED_MASTER(threading)
-  if ( l->depth==0 )
-    prof_print( l );
-  END_LOCKED_MASTER(threading)
 }
 
 
@@ -341,8 +363,13 @@ void method_free( level_struct *l ) {
 #endif
     fgmres_MP_struct_free( &(g.p_MP) );
 #if defined (INIT_ONE_PREC) && (defined (DEBUG) || defined (TEST_VECTOR_ANALYSIS))
+#ifdef HAVE_TM1p1
+    FREE( g.p.b, complex_double, 2*l->inner_vector_size );
+    FREE( g.p.x, complex_double, 2*l->inner_vector_size );
+#else
     FREE( g.p.b, complex_double, l->inner_vector_size );
     FREE( g.p.x, complex_double, l->inner_vector_size );
+#endif
 #endif
 #ifdef INIT_ONE_PREC
   } else {
@@ -368,28 +395,26 @@ void method_update( int setup_iter, level_struct *l, struct Thread *threading ) 
   
   if ( g.method > 0 && g.interpolation && g.num_levels > 1 && setup_iter > 0 ) {
     
-    double t0=0, t1=0, shift = creal(l->dirac_shift);
+    double t0=0, t1=0;
     
     START_LOCKED_MASTER(threading)
     g.in_setup = 1;
-      if ( l->depth==0 )
-        prof_init( l );
+    if ( l->depth==0 )
+      prof_init( l );
     END_LOCKED_MASTER(threading)
 
     START_MASTER(threading)
     t0 = MPI_Wtime();
     END_MASTER(threading)
     
-#ifndef HAVE_TM
-    if ( g.setup_m0 != shift )
-      optimized_shift_update( (complex_double)g.setup_m0, l, threading );
-#else
-    double tm_shift = g.tm_mu;
-    if ( g.setup_tm_mu != tm_shift || g.setup_m0 != shift ) {
-      g.tm_mu = g.setup_tm_mu;
-      optimized_shift_update( (complex_double)g.setup_m0, l, threading );
-    }
+    if ( g.setup_m0 != g.m0 )
+      m0_update( (complex_double)g.setup_m0, l, threading );
+#ifdef HAVE_TM
+    if ( g.setup_mu != g.mu )
+      tm_term_update( (complex_double)g.setup_mu, l, threading );
 #endif
+    if ( g.setup_m0 != g.m0 || g.setup_mu != g.mu )
+      finalize_operator_update( l, threading );
     
     if ( g.mixed_precision )
       iterative_float_setup( setup_iter, l, threading );
@@ -397,15 +422,14 @@ void method_update( int setup_iter, level_struct *l, struct Thread *threading ) 
       iterative_double_setup( setup_iter, l, threading );
 
     
-#ifndef HAVE_TM
-    if ( g.setup_m0 != shift )
-      optimized_shift_update( (complex_double)shift, l, threading );
-#else
-    if ( g.setup_tm_mu != tm_shift || g.setup_m0 != shift ) {
-      g.tm_mu = tm_shift;
-      optimized_shift_update( (complex_double) shift, l, threading );
-    }
+    if ( g.setup_m0 != g.m0 )
+      m0_update( (complex_double)g.m0, l, threading );
+#ifdef HAVE_TM
+    if ( g.setup_mu != g.mu )
+      tm_term_update( (complex_double)g.mu, l, threading );
 #endif
+    if ( g.setup_m0 != g.m0 || g.setup_mu != g.mu )
+      finalize_operator_update( l, threading );
 
     START_MASTER(threading)
     t1 = MPI_Wtime();
@@ -414,17 +438,16 @@ void method_update( int setup_iter, level_struct *l, struct Thread *threading ) 
     printf0("elapsed time: %lf seconds (%lf seconds on coarse grid)\n\n", t1-t0, g.coarse_time );
     END_MASTER(threading)
     
-#ifdef DEBUG
-    test_routine( l, threading );
-#endif
-
     START_LOCKED_MASTER(threading)
     g.in_setup = 0;
     if ( l->depth==0 )
       prof_print( l );
     END_LOCKED_MASTER(threading)
-    
-    
+      
+#ifdef DEBUG
+    test_routine( l, threading );
+#endif
+
   }
 }
 
@@ -487,7 +510,10 @@ void method_finalize( level_struct *l ) {
   FREE( g.ncycle, int, ls );
   FREE( g.relax_fac, double, ls );
 #ifdef HAVE_TM
-  FREE( g.tm_mu_factor, double, ls );
+  FREE( g.mu_factor, double, ls );
+#endif
+#ifdef HAVE_TM1p1
+  FREE( g.epsbar_factor, double, ls );
 #endif
   FREE( g.block_iter, int, ls );
   FREE( g.setup_iter, int, ls );
@@ -529,7 +555,7 @@ int read_parameter( void **save_at, char *search_pattern, char *read_format, int
   
   if ( read_from == NULL ) {
     if ( !set_default )
-      error0("unable to find string \"%s\" --- fatal error\n", search_pattern);
+      error0("FILE NULL, unable to find string \"%s\" --- fatal error\n", search_pattern);
     else
       return match;
   }
@@ -539,6 +565,7 @@ int read_parameter( void **save_at, char *search_pattern, char *read_format, int
   while ( !match && fgets( read_pattern, 100000, read_from ) ) {
   
     k = strlen( read_pattern );
+    /*
     j = 0;
     for ( i=0; i<k && !match; i++ ) {
       if ( search_pattern[j] == read_pattern[i] )
@@ -547,6 +574,16 @@ int read_parameter( void **save_at, char *search_pattern, char *read_format, int
         j = 0;
       if ( j == n ) {
         match = 1;
+      }
+    }
+    */ // replace it with a search just at the beginning of the line.
+    if(k>n) {
+      match = 1;
+      i = 0;
+      while ( i<n && match ) { 
+        if ( search_pattern[i] != read_pattern[i] )
+          match = 0;
+        i++;
       }
     }
   }
@@ -626,25 +663,17 @@ void g_init( level_struct *l ) {
   g.setup_iter = NULL;
   g.relax_fac = NULL;
 #ifdef HAVE_TM
-  g.tm_mu_factor = NULL;
+  g.mu_factor = NULL;
+#endif
+#ifdef HAVE_TM1p1
+  g.epsbar_factor = NULL;
+  g.n_flavours = 1;
 #endif
   g.gamma = NULL;
   g.odd_even_table = NULL;
   g.cur_storage = 0;
   g.max_storage = 0;
   g.in_setup = 0;
-}
-
-void parameter_update( level_struct *l ) {
-  
-  l->level = g.num_levels-1-l->depth;
-  l->post_smooth_iter = g.post_smooth_iter[l->depth];
-  l->block_iter = g.block_iter[l->depth];
-  l->setup_iter = g.setup_iter[l->depth];
-  l->num_eig_vect = g.num_eig_vect[l->depth];
-  
-  if ( l->level > 0 ) 
-    parameter_update( l->next_level );
 }
 
 void read_global_info( FILE *in ) {
@@ -706,26 +735,30 @@ void read_no_default_info( FILE *in, level_struct *l ) {
   read_parameter( &save_pt, "d0 block lattice:", "%d", 4, in, _NO_DEFAULT_SET );
 
     // Wilson mass
-  save_pt = &(l->real_shift); l->real_shift = 0;
+  save_pt = &(g.m0); g.m0 = 0;
   read_parameter( &save_pt, "m0:", "%lf", 1, in, _DEFAULT_SET ); 
-  if ( l->real_shift == 0 ) {
+  if ( g.m0 == 0 ) {
     double kappa=0; save_pt = &(kappa);    
     read_parameter( &save_pt, "kappa:", "%lf", 1, in, _DEFAULT_SET );
     ASSERT(kappa != 0);
-    l->real_shift = 1./(2.*kappa)-4.; //setting m0 from kappa
+    g.m0 = 1./(2.*kappa)-4.; //setting m0 from kappa
   }
   save_pt = &(g.csw);
   read_parameter( &save_pt, "csw:", "%lf", 1, in, _NO_DEFAULT_SET );
   
 #ifdef HAVE_TM
-  save_pt = &(g.tm_mu);g.tm_mu=0;
+  save_pt = &(g.mu);g.mu=0;
   read_parameter( &save_pt, "mu:", "%lf", 1, in, _DEFAULT_SET );
-  if ( g.tm_mu == 0 ) {
+  if ( g.mu == 0 ) {
     read_parameter( &save_pt, "2KappaMu:", "%lf", 1, in, _DEFAULT_SET );
-    g.tm_mu = g.tm_mu*(4.+l->real_shift);
+    g.mu = g.mu*(4.+g.m0);
   }
 #endif
 
+#ifdef HAVE_TM1p1
+  save_pt = &(g.epsbar); g.epsbar = 0;
+  read_parameter( &save_pt, "epsbar:", "%lf", 1, in, _DEFAULT_SET );
+#endif
 }
 
 void set_global_info( struct init *params, level_struct *l ) {
@@ -747,10 +780,10 @@ void set_global_info( struct init *params, level_struct *l ) {
   }
   
   // Operator
-  l->real_shift = 1./(2.*params->kappa)-4.;
+  g.m0 = 1./(2.*params->kappa)-4.;
   g.csw = params->csw;
 #ifdef HAVE_TM
-  g.tm_mu = params->mu;
+  g.mu = params->mu;
 #endif
   
   g.num_openmp_processes = params->number_openmp_threads;
@@ -781,23 +814,23 @@ void read_geometry_data( FILE *in, int ls ) {
   int i, mu, nb, nls, nlls, flag;
   
   for ( i=0; i<ls; i++ ) {
-
+    
     if(i>0) {
       // global lattice
       sprintf( inputstr, "d%d global lattice:", i );
       save_pt = g.global_lattice[i];
       
       if ( ! read_parameter( &save_pt, inputstr, "%d", 4, in, _DEFAULT_SET ) ) {
-	nls = 1;
-	for ( mu=0; mu<4; mu++ ) {
-	  g.global_lattice[i][mu] = g.global_lattice[i-1][mu]/g.block_lattice[i-1][mu];
-	  nls *= g.global_lattice[i][mu];
-	}
-	if ( g.odd_even && nls < 2 ) {
-	  warning0("lattice dimensions not valid for a %d-level method, choosing a %d-level method\n", g.num_levels, i );
-	  g.num_levels = i; ls = i;
-	  break;
-	}
+        nls = 1;
+        for ( mu=0; mu<4; mu++ ) {
+          g.global_lattice[i][mu] = g.global_lattice[i-1][mu]/g.block_lattice[i-1][mu];
+          nls *= g.global_lattice[i][mu];
+        }
+        if ( g.odd_even && nls < 2 ) {
+          warning0("lattice dimensions not valid for a %d-level method, choosing a %d-level method\n", g.num_levels, i );
+          g.num_levels = i; ls = i;
+          break;
+        }
       }
       
       // local lattice
@@ -805,84 +838,84 @@ void read_geometry_data( FILE *in, int ls ) {
       save_pt = g.local_lattice[i];
       
       if ( ! read_parameter( &save_pt, inputstr, "%d", 4, in, _DEFAULT_SET ) ) {
-	nls = 1;
-	nlls = 1;
-	for ( mu=0; mu<4; mu++ ) {
-	  g.local_lattice[i][mu] = g.local_lattice[i-1][mu]/g.block_lattice[i-1][mu];
-	  nlls *= g.local_lattice[i][mu];
-	  nls *= g.global_lattice[i][mu];
-	}
-	if ( g.odd_even && nlls < 2 ) {
-	  if ( nls/nlls > 1 ) {
-	    mu = shortest_dir( g.local_lattice[i] );
-	    if ( g.global_lattice[i][mu] > g.local_lattice[i][mu] ) {
-	      g.local_lattice[i][mu] *= lcm( g.local_lattice[i][mu],
-					     g.global_lattice[i][mu]/g.local_lattice[i][mu] );
-	    }
-	  }
-	}
+        nls = 1;
+        nlls = 1;
+        for ( mu=0; mu<4; mu++ ) {
+          g.local_lattice[i][mu] = g.local_lattice[i-1][mu]/g.block_lattice[i-1][mu];
+          nlls *= g.local_lattice[i][mu];
+          nls *= g.global_lattice[i][mu];
+        }
+        if ( g.odd_even && nlls < 2 ) {
+          if ( nls/nlls > 1 ) {
+            mu = shortest_dir( g.local_lattice[i] );
+            if ( g.global_lattice[i][mu] > g.local_lattice[i][mu] ) {
+              g.local_lattice[i][mu] *= lcm( g.local_lattice[i][mu],
+                                             g.global_lattice[i][mu]/g.local_lattice[i][mu] );
+            }
+          }
+        }
       }
       
       // block lattice
       for ( mu=0; mu<4; mu++ )
-	g.block_lattice[i][mu] = 1;
+        g.block_lattice[i][mu] = 1;
       if ( i<ls-1 ) {
-	sprintf( inputstr, "d%d block lattice:", i );
-	save_pt = g.block_lattice[i];
-	if ( ! read_parameter( &save_pt, inputstr, "%d", 4, in, _DEFAULT_SET ) ) {
-	  nls = 1;
-	  nb = 1;
-	  flag = 1;
-	  for ( mu=0; mu<4; mu++ )  {
-	    if ( DIVIDES( 2, g.global_lattice[i][mu] ) ) {
-	      g.block_lattice[i][mu] = 2;
-	    } else if ( DIVIDES( 3, g.global_lattice[i][mu] ) ) {
-	      g.block_lattice[i][mu] = 3;
-	    } else {
-	      warning0("lattice dimensions not valid for a %d-level method, choosing a %d-level method\n", g.num_levels, i+1 );
-	      g.num_levels = i+1; ls=i+1;
-	      g.block_lattice[i][mu] = 1;
-	      flag = 0;
-	      break;
-	    }
-	    nb *= g.local_lattice[i][mu]/g.block_lattice[i][mu];
-	    
-	    if ( g.local_lattice[i][mu] < g.block_lattice[i][mu] ) {
-	      g.local_lattice[i][mu] *= g.block_lattice[i][mu];
-	      if ( ! DIVIDES( g.local_lattice[i][mu], g.global_lattice[i][mu] ) ) {
-		g.local_lattice[i][mu] /= g.block_lattice[i][mu];
-	      }
-	      warning0("lattice dimensions not valid for a %d-level method, choosing a %d-level method\n", g.num_levels, i+1 );
-	      g.num_levels = i+1; ls=i+1;
-	      g.block_lattice[i][mu] = 1;
-	      flag = 0;
-	      break;
+        sprintf( inputstr, "d%d block lattice:", i );
+        save_pt = g.block_lattice[i];
+        if ( ! read_parameter( &save_pt, inputstr, "%d", 4, in, _DEFAULT_SET ) ) {
+          nls = 1;
+          nb = 1;
+          flag = 1;
+          for ( mu=0; mu<4; mu++ )  {
+            if ( DIVIDES( 2, g.global_lattice[i][mu] ) ) {
+              g.block_lattice[i][mu] = 2;
+            } else if ( DIVIDES( 3, g.global_lattice[i][mu] ) ) {
+              g.block_lattice[i][mu] = 3;
+            } else {
+              warning0("lattice dimensions not valid for a %d-level method, choosing a %d-level method\n", g.num_levels, i+1 );
+              g.num_levels = i+1; ls=i+1;
+              g.block_lattice[i][mu] = 1;
+              flag = 0;
+              break;
             }
-	  }
-	  
-	  if ( flag == 1 && g.method == 2 && nb == 1 ) {
-	    mu = shortest_dir( g.local_lattice[i] );
-	    if ( g.global_lattice[i][mu] > g.local_lattice[i][mu] ) {
-	      g.local_lattice[i][mu] *= lcm( g.local_lattice[i][mu],
-					     g.global_lattice[i][mu]/g.local_lattice[i][mu] );
-	    }
-	  }
-	  
-	}
+            nb *= g.local_lattice[i][mu]/g.block_lattice[i][mu];
+            
+            if ( g.local_lattice[i][mu] < g.block_lattice[i][mu] ) {
+              g.local_lattice[i][mu] *= g.block_lattice[i][mu];
+              if ( ! DIVIDES( g.local_lattice[i][mu], g.global_lattice[i][mu] ) ) {
+                g.local_lattice[i][mu] /= g.block_lattice[i][mu];
+              }
+              warning0("lattice dimensions not valid for a %d-level method, choosing a %d-level method\n", g.num_levels, i+1 );
+              g.num_levels = i+1; ls=i+1;
+              g.block_lattice[i][mu] = 1;
+              flag = 0;
+              break;
+            }
+          }
+          
+          if ( flag == 1 && g.method == 2 && nb == 1 ) {
+            mu = shortest_dir( g.local_lattice[i] );
+            if ( g.global_lattice[i][mu] > g.local_lattice[i][mu] ) {
+              g.local_lattice[i][mu] *= lcm( g.local_lattice[i][mu],
+                                             g.global_lattice[i][mu]/g.local_lattice[i][mu] );
+            }
+          }
+          
+        }
       }
     }
 #ifdef DEBUG
     printf00("level: %d, gl: %3d %3d %3d %3d\n", i, g.global_lattice[i][0],
-            g.global_lattice[i][1],g.global_lattice[i][2],g.global_lattice[i][3] );
+             g.global_lattice[i][1],g.global_lattice[i][2],g.global_lattice[i][3] );
     
     printf00("level: %d, ll: %3d %3d %3d %3d\n", i, g.local_lattice[i][0],
-            g.local_lattice[i][1],g.local_lattice[i][2],g.local_lattice[i][3] );
-            
+             g.local_lattice[i][1],g.local_lattice[i][2],g.local_lattice[i][3] );
+    
     printf00("level: %d, bl: %3d %3d %3d %3d\n\n", i, g.block_lattice[i][0],
-            g.block_lattice[i][1],g.block_lattice[i][2],g.block_lattice[i][3] );
+             g.block_lattice[i][1],g.block_lattice[i][2],g.block_lattice[i][3] );
 #endif
-            
-            
+    
+    
     sprintf( inputstr, "d%d post smooth iter:", i );
     save_pt = &(g.post_smooth_iter[i]); g.post_smooth_iter[i] = 4;
     read_parameter( &save_pt, inputstr, "%d", 1, in, _DEFAULT_SET );
@@ -910,7 +943,13 @@ void read_geometry_data( FILE *in, int ls ) {
     
 #ifdef HAVE_TM
     sprintf( inputstr, "d%d mu factor:", i );
-    save_pt = &(g.tm_mu_factor[i]); g.tm_mu_factor[i] = 1;
+    save_pt = &(g.mu_factor[i]); g.mu_factor[i] = 1;
+    read_parameter( &save_pt, inputstr, "%lf", 1, in, _DEFAULT_SET );
+#endif
+
+#ifdef HAVE_TM1p1
+    sprintf( inputstr, "d%d epsbar factor:", i );
+    save_pt = &(g.epsbar_factor[i]); g.epsbar_factor[i] = 1;
     read_parameter( &save_pt, inputstr, "%lf", 1, in, _DEFAULT_SET );
 #endif
     
@@ -945,15 +984,22 @@ void read_solver_parameters( FILE *in, level_struct *l ) {
   save_pt = &(g.odd_even); g.odd_even = 1;
   read_parameter( &save_pt, "odd even preconditioning:", "%d", 1, in, _DEFAULT_SET );
 
-  save_pt = &(g.setup_m0); g.setup_m0=l->real_shift;
+  save_pt = &(g.setup_m0); g.setup_m0 = g.m0;
   read_parameter( &save_pt, "setup m0:", "%lf", 1, in, _DEFAULT_SET );
 #ifdef HAVE_TM
-  save_pt = &(g.tm_mu_odd_shift);g.tm_mu_odd_shift=0;
+  save_pt = &(g.mu_odd_shift); g.mu_odd_shift = 0;
   read_parameter( &save_pt, "mu odd shift:", "%lf", 1, in, _DEFAULT_SET );
-  save_pt = &(g.tm_mu_even_shift);g.tm_mu_even_shift=0;
+  save_pt = &(g.mu_even_shift); g.mu_even_shift = 0;
   read_parameter( &save_pt, "mu even shift:", "%lf", 1, in, _DEFAULT_SET );
-  save_pt = &(g.setup_tm_mu); g.setup_tm_mu=g.tm_mu;
+  save_pt = &(g.setup_mu); g.setup_mu = g.mu;
   read_parameter( &save_pt, "setup mu:", "%lf", 1, in, _DEFAULT_SET );
+#endif
+
+#ifdef HAVE_TM1p1
+  save_pt = &(g.epsbar_ig5_odd_shift);g.epsbar_ig5_odd_shift=0;
+  read_parameter( &save_pt, "epsbar odd shift:", "%lf", 1, in, _DEFAULT_SET );
+  save_pt = &(g.epsbar_ig5_even_shift);g.epsbar_ig5_even_shift=0;
+  read_parameter( &save_pt, "epsbar even shift:", "%lf", 1, in, _DEFAULT_SET );
 #endif
   
   save_pt = &(g.method); g.method = 2;
@@ -1033,7 +1079,7 @@ void validate_parameters( int ls, level_struct *l ) {
 
   int i;
   int mu;
-  
+
 #ifdef SSE
   if ( !g.odd_even )
     warning0("The SSE implementation is based on the odd-even preconditioned code.\
@@ -1071,10 +1117,6 @@ void validate_parameters( int ls, level_struct *l ) {
 #endif
     }
     
-  for ( i=0; i<g.num_levels-2; i++ )
-    //TODO: Could work without, but you need to fix the setup phase.
-    ASSERT( g.num_eig_vect[i] <= g.num_eig_vect[i+1] );
-  
   if ( g.odd_even ) {
     int coarse_sites_per_core = 1;
     for ( mu=0; mu<4; mu++ ) {
@@ -1108,9 +1150,24 @@ void validate_parameters( int ls, level_struct *l ) {
   ASSERT( IMPLIES( g.kcycle && g.method > 0, g.kcycle_max_restart > 0 ) );
   ASSERT( IMPLIES( g.kcycle && g.method > 0, 0 < g.kcycle_tol && g.kcycle_tol < 1 ) );
   
+
+  //LIST OF CASES WHICH SHOULD WORK, BUT DO NOT (TODO)
+
 #ifdef SSE
   ASSERT( g.mixed_precision );
-//   ASSERT( DIVIDES( 4, g.num_eig_vect[0] ) );
+#endif
+  
+  //TODO: Could work without, but you need to fix the setup phase.    
+  for ( i=0; i<g.num_levels-2; i++ )
+    ASSERT( g.num_eig_vect[i] <= g.num_eig_vect[i+1] );
+
+  //TODO: for some reason g.mixed_precision=0 do not work with g.num_levels>2
+  if ( g.num_levels>2 && g.interpolation )
+    ASSERT( g.mixed_precision );
+
+#ifdef HAVE_TM1p1
+  //TODO: method = 6 not supported with HAVE_TM1p1. To fix all the g5D functions
+  ASSERT( g.method !=6 );
 #endif
 }
 
@@ -1130,7 +1187,10 @@ void allocate_for_global_struct_after_read_global_info( int ls ) {
   MALLOC( g.ncycle, int, ls );
   MALLOC( g.relax_fac, double, ls );
 #ifdef HAVE_TM
-  MALLOC( g.tm_mu_factor, double, ls );
+  MALLOC( g.mu_factor, double, ls );
+#endif
+#ifdef HAVE_TM1p1
+  MALLOC( g.epsbar_factor, double, ls );
 #endif
   MALLOC( g.block_iter, int, ls );
   MALLOC( g.setup_iter, int, ls );
@@ -1157,7 +1217,8 @@ void set_level_and_global_structs_according_to_global_struct( level_struct *l ) 
   l->block_iter = g.block_iter[0];
   l->setup_iter = g.setup_iter[0];
   l->num_eig_vect = g.num_eig_vect[0];
-  
+  l->num_parent_eig_vect = 6; //for consistency sake
+    
   // compute some additional values
   l->num_lattice_site_var = 12;
   g.num_processes = 1;
@@ -1170,16 +1231,7 @@ void set_level_and_global_structs_according_to_global_struct( level_struct *l ) 
     g.num_processes *= l->global_splitting[mu];
   }
   
-  l->dirac_shift = l->real_shift;
-#ifdef HAVE_TM
-  l->tm_shift = g.tm_mu;
-  l->tm_even_shift = g.tm_mu_even_shift;
-  l->tm_odd_shift = g.tm_mu_odd_shift; 
-#endif
-  l->even_shift = l->dirac_shift;
-  l->odd_shift = l->dirac_shift;
-  g.solve_m0 = l->dirac_shift;
-  g.setup_m0 = l->dirac_shift;
+  g.setup_m0 = g.m0;
 }
 
 void lg_in( char *inputfile, level_struct *l ) {
@@ -1213,6 +1265,29 @@ void lg_in( char *inputfile, level_struct *l ) {
     printf00("source list: %s\n", g.source_list );
   fclose(in);
 }
+
+void parameter_update( level_struct *l ) {
+  
+  if(l->depth==0) {
+    int ls = MAX(g.num_levels,2);
+    set_level_and_global_structs_according_to_global_struct( l );
+    validate_parameters( ls, l );
+  }
+
+  l->level = g.num_levels-1-l->depth;
+  l->post_smooth_iter = g.post_smooth_iter[l->depth];
+  l->block_iter = g.block_iter[l->depth];
+  l->setup_iter = g.setup_iter[l->depth];
+  l->num_eig_vect = g.num_eig_vect[l->depth];
+  if(l->depth>0)
+    l->num_parent_eig_vect = g.num_eig_vect[l->depth-1];
+  else
+    l->num_parent_eig_vect = 6;
+  
+  if ( l->level > 0 ) 
+    parameter_update( l->next_level );
+}
+
 
 void set_DDalphaAMG_parameters( struct init *params, level_struct *l ) {
 

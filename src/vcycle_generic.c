@@ -23,7 +23,7 @@
 #include "vcycle_PRECISION.h"
 
 void smoother_PRECISION( vector_PRECISION phi, vector_PRECISION Dphi, vector_PRECISION eta,
-                         int n, const int res, complex_PRECISION shift, level_struct *l, struct Thread *threading ) {
+                         int n, const int res, level_struct *l, struct Thread *threading ) {
   
   ASSERT( phi != eta );
 
@@ -41,7 +41,6 @@ void smoother_PRECISION( vector_PRECISION phi, vector_PRECISION Dphi, vector_PRE
     int start = threading->start_index[l->depth];
     int end   = threading->end_index[l->depth];
     START_LOCKED_MASTER(threading)
-    l->sp_PRECISION.shift = shift;
     l->sp_PRECISION.initial_guess_zero = res;
     l->sp_PRECISION.num_restart = n;
     END_LOCKED_MASTER(threading)
@@ -132,10 +131,10 @@ void vcycle_PRECISION( vector_PRECISION phi, vector_PRECISION Dphi, vector_PRECI
         interpolate3_PRECISION( phi, l->next_level->p_PRECISION.x, l, threading );
       else
         interpolate_PRECISION( phi, l->next_level->p_PRECISION.x, l, threading );
-      smoother_PRECISION( phi, Dphi, eta, l->post_smooth_iter, _RES, _NO_SHIFT, l, threading );
+      smoother_PRECISION( phi, Dphi, eta, l->post_smooth_iter, _RES, l, threading );
       res = _RES;
     }
   } else {
-    smoother_PRECISION( phi, Dphi, eta, (l->depth==0)?l->n_cy:l->post_smooth_iter, res, _NO_SHIFT, l, threading );
+    smoother_PRECISION( phi, Dphi, eta, (l->depth==0)?l->n_cy:l->post_smooth_iter, res, l, threading );
   }
 }

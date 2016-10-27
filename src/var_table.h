@@ -54,9 +54,11 @@
       for ( int i=0; i<g.vt.average_over; i++ ) { \
         g.vt.p_end->values[_TRCKD_VAL] = *tmp_var; \
         parameter_update( l ); \
-        if ( g.vt.shift_update ) \
-          shift_update( *tmp_var, l, no_threading ); \
-        if ( g.vt.re_setup ) { \
+        if ( g.vt.shift_update ) {		  \
+          m0_update( *tmp_var, l, no_threading ); \
+	  g.m0 = *tmp_var; \
+          } \
+          if ( g.vt.re_setup ) {	 \
           double t0, t1; \
           t0 = MPI_Wtime(); \
           method_re_setup( l, no_threading ); \

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016, Matthias Rottmann, Artur Strebel, Simon Heybrock, Simone Bacchio, Bjoern Leder.
+ * Copyright (C) 2016, Simone Bacchio.
  * 
  * This file is part of the DDalphaAMG solver library.
  * 
@@ -145,8 +145,12 @@
    **  mg_status.success = 0: not converged, 1: converged
    **  mg_status.info = final residual
    **/
-  void DDalphaAMG_solve( double *vector_out, double *vector_in, double tol,
-		     DDalphaAMG_status *mg_status );
+  void DDalphaAMG_solve( double *vector_out, double *vector_in,
+                         double tol, DDalphaAMG_status *mg_status );
+  
+  void DDalphaAMG_solve_doublet( double *vector1_out, double *vector1_in, 
+                                 double *vector2_out, double *vector2_in,
+                                 double tol, DDalphaAMG_status *mg_status );
 
   /**
    ** Optional - Solve squared operator performing two inversions: 
@@ -154,8 +158,12 @@
    **  mg_status.success = 0: not converged, 1: converged
    **  mg_status.info = final residual
    **/
-  void DDalphaAMG_solve_squared( double *vector_out, double *vector_in, double tol,
-			     DDalphaAMG_status *mg_status );
+  void DDalphaAMG_solve_squared( double *vector_out, double *vector_in,
+                                 double tol, DDalphaAMG_status *mg_status );
+  
+  void DDalphaAMG_solve_doublet_squared( double *vector1_out, double *vector1_in, 
+                                         double *vector2_out, double *vector2_in,
+                                         double tol, DDalphaAMG_status *mg_status );
 
   /**
    ** Optional - Solve squared operator against the odd compoments performing two inversions: 
@@ -163,8 +171,12 @@
    **  mg_status.success = 0: not converged, 1: converged
    **  mg_status.info = final residual
    **/
- void DDalphaAMG_solve_squared_odd( double *vector_out, double *vector_in, double tol,
-				DDalphaAMG_status *mg_status );
+  void DDalphaAMG_solve_squared_odd( double *vector_out, double *vector_in,
+                                    double tol, DDalphaAMG_status *mg_status );
+  
+  void DDalphaAMG_solve_doublet_squared_odd( double *vector1_out, double *vector1_in, 
+                                             double *vector2_out, double *vector2_in,
+                                             double tol, DDalphaAMG_status *mg_status );
 
   /**
    ** Optional - Solve squared operator against the even compoments performing two inversions:
@@ -172,8 +184,12 @@
    **  mg_status.success = 0: not converged, 1: converged
    **  mg_status.info = final residual
    **/
- void DDalphaAMG_solve_squared_even( double *vector_out, double *vector_in, double tol,
-				 DDalphaAMG_status *mg_status );
+  void DDalphaAMG_solve_squared_even( double *vector_out, double *vector_in,
+                                     double tol, DDalphaAMG_status *mg_status );
+  
+  void DDalphaAMG_solve_doublet_squared_even( double *vector1_out, double *vector1_in, 
+                                              double *vector2_out, double *vector2_in,
+                                              double tol, DDalphaAMG_status *mg_status );
 
   /**
    ** Optional - Apply the operator:
@@ -181,7 +197,10 @@
    **  mg_status.success = 1
    **/
   void DDalphaAMG_apply_operator( double *vector_out, double *vector_in,
-			      DDalphaAMG_status *mg_status );
+                                  DDalphaAMG_status *mg_status );
+
+  void DDalphaAMG_apply_operator_doublet( double *vector1_out, double *vector1_in,
+                                          double *vector2_out, double *vector2_in, DDalphaAMG_status *mg_status );
 
   /**
    ** Optional - Apply a preconditioner step:
@@ -190,7 +209,9 @@
    **  mg_status.info = residual after preconditioning
    **/
   void DDalphaAMG_preconditioner( double *vector_out, double *vector_in,
-			      DDalphaAMG_status *mg_status );
+                                  DDalphaAMG_status *mg_status );
+  void DDalphaAMG_preconditioner_doublet( double *vector1_out, double *vector1_in,
+                                          double *vector2_out, double *vector2_in, DDalphaAMG_status *mg_status );
 
   /*
    *  Concluding the following functions have to be call for freeing the memory and finalizing
@@ -228,11 +249,11 @@
    **    -> mg_params.conf_index_fct = NULL, mg_params.vector_index_fct = NULL;
    **/
   void DDalphaAMG_read_configuration( double *gauge_field, char *filename, int format,
-				      DDalphaAMG_status *mg_status );
+                                      DDalphaAMG_status *mg_status );
   void DDalphaAMG_read_vector( double *vector_in, char *filename, int format,
-			       DDalphaAMG_status *mg_status );
+                               DDalphaAMG_status *mg_status );
   void DDalphaAMG_write_vector( double *vector_out, char *filename, int format,
-				DDalphaAMG_status *mg_status );
+                                DDalphaAMG_status *mg_status );
 
   /**
    ** Extra - Define vector with constant or random components
@@ -414,23 +435,39 @@
      ** Hopping parameter
      **/
     double kappa;
-    
+
     /**
      ** Twisted mass parameter and shifts on even/odd sites
      **/
     double mu;
     double mu_odd_shift;
     double mu_even_shift;
-    
+
     /**
-     ** Twisted mass factor for the preconditioner on each level.
+     ** Twisted mass factor for the preconditioner on each level, l.
      **  Default 6 on the coarsest level 
      ** 
-     **   -> mu_o[l] = (mu + mu_odd_shift)  * mu_factor
-     **   -> mu_e[l] = (mu + mu_even_shift) * mu_factor
+     **   -> mu_o[l] = (mu + mu_odd_shift)  * mu_factor[l]
+     **   -> mu_e[l] = (mu + mu_even_shift) * mu_factor[l]
      **/
     double mu_factor[MAX_MG_LEVELS];  
 
+    /**
+     ** Twisted mass doublet parameter and shifts on even/odd sites
+     **/
+    double epsbar;
+    double epsbar_ig5_odd_shift;
+    double epsbar_ig5_even_shift;
+
+    /**
+     ** Twisted mass doublet factor for the preconditioner on each level, l.
+     **  Default 6 on the coarsest level 
+     ** 
+     **   -> epsbar_o[l] = ( epsbar + i * gamma_5 * epsbar_ig5_odd_shift ) * epsbar_factor[l]
+     **   -> epsbar_e[l] = ( epsbar + i * gamma_5 * epsbar_ig5_even_shift ) * epsbar_factor[l]
+     **/
+    double epsbar_factor[MAX_MG_LEVELS];  
+    
     /**
      ** Function returning the index of a element at the corresponding
      **    position (t,z,y,x are local position w.r.t the process ).

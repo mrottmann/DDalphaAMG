@@ -231,8 +231,8 @@ void coarse_operator_PRECISION_setup_vectorized( complex_PRECISION *operator, le
 void coarse_operator_PRECISION_set_couplings( operator_PRECISION_struct *op, level_struct *l, struct Thread *threading ) {
 
   int n = l->num_inner_lattice_sites;
-  int sc_size = (l->num_lattice_site_var/2)*(l->num_lattice_site_var+1);
-  int nc_size = SQUARE(l->num_lattice_site_var);
+  int sc_size = (l->num_parent_eig_vect)*(l->num_parent_eig_vect*2+1);
+  int nc_size = SQUARE(l->num_parent_eig_vect*2);
   int n1, n2;
   if ( l->depth > 0 ) {
     n1 = l->num_lattice_sites;
@@ -244,37 +244,52 @@ void coarse_operator_PRECISION_set_couplings( operator_PRECISION_struct *op, lev
     
   START_LOCKED_MASTER(threading)
   if( op->D_vectorized == NULL ) {
-    int column_offset = SIMD_LENGTH_PRECISION*((l->num_lattice_site_var+SIMD_LENGTH_PRECISION-1)/SIMD_LENGTH_PRECISION);
+    int column_offset = SIMD_LENGTH_PRECISION*((l->num_parent_eig_vect*2+SIMD_LENGTH_PRECISION-1)/SIMD_LENGTH_PRECISION);
     // 2 is for complex, 4 is for 4 directions
-    MALLOC_HUGEPAGES( op->D_vectorized, OPERATOR_TYPE_PRECISION, 2*4*l->num_lattice_site_var*column_offset*n2, 64 );
-    MALLOC_HUGEPAGES( op->D_transformed_vectorized, OPERATOR_TYPE_PRECISION, 2*4*l->num_lattice_site_var*column_offset*n2, 64 );
-    MALLOC_HUGEPAGES( op->clover_vectorized, OPERATOR_TYPE_PRECISION, 2*l->num_lattice_site_var*column_offset*n, 64 );
+    MALLOC_HUGEPAGES( op->D_vectorized, OPERATOR_TYPE_PRECISION, 2*8*l->num_parent_eig_vect*column_offset*n2, 64 );
+    MALLOC_HUGEPAGES( op->D_transformed_vectorized, OPERATOR_TYPE_PRECISION, 2*8*l->num_parent_eig_vect*column_offset*n2, 64 );
+    MALLOC_HUGEPAGES( op->clover_vectorized, OPERATOR_TYPE_PRECISION, 4*l->num_parent_eig_vect*column_offset*n, 64 );
+#ifdef HAVE_TM1p1
+    MALLOC_HUGEPAGES( op->clover_doublet_vectorized, OPERATOR_TYPE_PRECISION, 2*4*l->num_parent_eig_vect*column_offset*n, 64 );
+#endif
   }
   END_LOCKED_MASTER(threading)
 
   int start, end;
   compute_core_start_end_custom(0, n, &start, &end, l, threading, 1);
   int n_per_core = end-start;
-  int column_offset = SIMD_LENGTH_PRECISION*((l->num_lattice_site_var+SIMD_LENGTH_PRECISION-1)/SIMD_LENGTH_PRECISION);
-  int offset_v = 2*l->num_lattice_site_var*column_offset;
+  int column_offset = SIMD_LENGTH_PRECISION*((l->num_parent_eig_vect*2+SIMD_LENGTH_PRECISION-1)/SIMD_LENGTH_PRECISION);
+  int offset_v = 4*l->num_parent_eig_vect*column_offset;
   copy_coarse_operator_to_vectorized_layout_PRECISION(
       op->D + 4*start*nc_size,
       op->D_vectorized + 4*start*offset_v,
-      n_per_core, l->num_lattice_site_var/2);
+      n_per_core, l->num_parent_eig_vect);
   copy_coarse_operator_to_transformed_vectorized_layout_PRECISION(
       op->D + 4*start*nc_size,
       op->D_transformed_vectorized + 4*start*offset_v,
-      n_per_core, l->num_lattice_site_var/2);
+      n_per_core, l->num_parent_eig_vect);
   copy_coarse_operator_clover_to_vectorized_layout_PRECISION(
       op->clover + start*sc_size,
       op->clover_vectorized + start*offset_v,
-      n_per_core, l->num_lattice_site_var/2);
+      n_per_core, l->num_parent_eig_vect);
 #ifdef HAVE_TM
-  int tm_size = (l->num_lattice_site_var/2)*(l->num_lattice_site_var/2+1);
+  int tm_size = (l->num_parent_eig_vect)*(l->num_parent_eig_vect+1);
   add_tm_term_to_vectorized_layout_PRECISION(
       op->tm_term + start*tm_size,
       op->clover_vectorized + start*offset_v,
-      n_per_core, l->num_lattice_site_var/2);
+      n_per_core, l->num_parent_eig_vect);
+#endif
+#ifdef HAVE_TM1p1
+  copy_coarse_operator_clover_to_doublet_vectorized_layout_PRECISION(
+      op->clover + start*sc_size,
+      op->clover_doublet_vectorized + start*offset_v,
+      n_per_core, l->num_parent_eig_vect);
+#ifdef HAVE_TM
+  add_tm_term_to_doublet_vectorized_layout_PRECISION(
+      op->tm_term + start*tm_size,
+      op->clover_doublet_vectorized + start*offset_v,
+      n_per_core, l->num_parent_eig_vect);
+#endif
 #endif
   SYNC_CORES(threading)
   
@@ -285,45 +300,57 @@ void coarse_operator_PRECISION_set_couplings( operator_PRECISION_struct *op, lev
     copy_coarse_operator_to_vectorized_layout_PRECISION(
         op->D + 4*start*nc_size,
         op->D_vectorized + 4*start*offset_v,
-        n_per_core, l->num_lattice_site_var/2);
+        n_per_core, l->num_parent_eig_vect);
     copy_coarse_operator_to_transformed_vectorized_layout_PRECISION(
         op->D + 4*start*nc_size,
         op->D_transformed_vectorized + 4*start*offset_v,
-        n_per_core, l->num_lattice_site_var/2);
+        n_per_core, l->num_parent_eig_vect);
     SYNC_CORES(threading)
   }
 }
 
 void coarse_operator_PRECISION_set_couplings_clover( operator_PRECISION_struct *op, level_struct *l, struct Thread *threading ) {
     
-  if(op->D_vectorized == 0) 
+  if(op->D_vectorized == NULL) 
     coarse_operator_PRECISION_set_couplings(op, l, threading);
   
   int n = l->num_inner_lattice_sites;
-  int sc_size = (l->num_lattice_site_var/2)*(l->num_lattice_site_var+1);
+  int sc_size = (l->num_parent_eig_vect)*(l->num_parent_eig_vect*2+1);
   int start, end;
 
   compute_core_start_end_custom(0, n, &start, &end, l, threading, 1);
   int n_per_core = end-start;
-  int column_offset = SIMD_LENGTH_PRECISION*((l->num_lattice_site_var+SIMD_LENGTH_PRECISION-1)/SIMD_LENGTH_PRECISION);
-  int offset_v = 2*l->num_lattice_site_var*column_offset;
+  int column_offset = SIMD_LENGTH_PRECISION*((l->num_parent_eig_vect*2+SIMD_LENGTH_PRECISION-1)/SIMD_LENGTH_PRECISION);
+  int offset_v = 2*l->num_parent_eig_vect*2*column_offset;
 
   copy_coarse_operator_clover_to_vectorized_layout_PRECISION(
       op->clover + start*sc_size,
       op->clover_vectorized + start*offset_v,
-      n_per_core, l->num_lattice_site_var/2);
+      n_per_core, l->num_parent_eig_vect);
 #ifdef HAVE_TM
-  int tm_size = (l->num_lattice_site_var/2)*(l->num_lattice_site_var/2+1);
+  int tm_size = (l->num_parent_eig_vect)*(l->num_parent_eig_vect+1);
   add_tm_term_to_vectorized_layout_PRECISION( 
       op->tm_term + start*tm_size,
       op->clover_vectorized + start*offset_v,
-      n_per_core, l->num_lattice_site_var/2);
+      n_per_core, l->num_parent_eig_vect);
+#endif
+#ifdef HAVE_TM1p1
+  copy_coarse_operator_clover_to_doublet_vectorized_layout_PRECISION(
+      op->clover + start*sc_size,
+      op->clover_doublet_vectorized + start*offset_v,
+      n_per_core, l->num_parent_eig_vect);
+#ifdef HAVE_TM
+  add_tm_term_to_doublet_vectorized_layout_PRECISION(
+      op->tm_term + start*tm_size,
+      op->clover_doublet_vectorized + start*offset_v,
+      n_per_core, l->num_parent_eig_vect);
+#endif
 #endif
 
 }
 #endif
 
-
+ 
 void set_coarse_self_coupling_PRECISION_vectorized( complex_PRECISION *spin_0_1, complex_PRECISION *spin_2_3,
     complex_PRECISION *V, level_struct *l, int site, const int n_rhs, complex_PRECISION *tmp ) {
 

@@ -22,6 +22,6 @@ INSTALL:
 
 HOWTO:
 
-  After having compiled the the user documentation via
+  After having compiled the user documentation via
   "make documentation" please consult the compiled PDF in /doc for
   further information.

@@ -26,19 +26,53 @@
   #include "dirac_PRECISION.h"
   #include "coarse_operator_PRECISION.h"
 
-
   static inline void apply_operator_PRECISION( vector_PRECISION output, vector_PRECISION input, gmres_PRECISION_struct *p, level_struct *l, struct Thread *threading ) {
+
     p->eval_operator( output, input, p->op, l, threading );
-    if ( p->shift ) {
-      int start, end;
-      compute_core_start_end_custom(p->v_start, p->v_end, &start, &end, l, threading, l->num_lattice_site_var );
-      vector_PRECISION_saxpy( output, output, input, -p->shift, start, end, l );
-    }
+
   }
   
   static inline void apply_operator_dagger_PRECISION( vector_PRECISION output, vector_PRECISION input, gmres_PRECISION_struct *p, level_struct *l, struct Thread *threading ) {
-    if ( l->depth > 0 ) apply_coarse_operator_dagger_PRECISION( output, input, &(l->s_PRECISION.op), l, threading );
-    else d_plus_clover_dagger_PRECISION( output, input, p->op, l, threading );
+
+#ifdef HAVE_TM1p1
+    if( g.n_flavours == 2 ) {
+      tau1_gamma5_PRECISION( l->vbuf_PRECISION[6], input, l, threading );
+    } else
+#endif
+      {
+        gamma5_PRECISION( l->vbuf_PRECISION[6], input, l, threading );
+#ifdef HAVE_TM
+        //TODO: change_mu_sign_PRECISION( p->op, l, threading );
+#endif
+      }
+
+    apply_operator_PRECISION( l->vbuf_PRECISION[7], l->vbuf_PRECISION[6], p, l, threading );
+
+#ifdef HAVE_TM1p1
+    if( g.n_flavours == 2 ) {
+      tau1_gamma5_PRECISION( output, l->vbuf_PRECISION[7], l, threading );
+    } else
+#endif
+      {
+        gamma5_PRECISION( output, l->vbuf_PRECISION[7], l, threading );
+#ifdef HAVE_TM
+        //TODO: change_mu_sign_PRECISION( p->op, l, threading );
+#endif
+      }
+    
+  }
+
+  static inline void test0_PRECISION( char* format, int depth, PRECISION test ) {
+    if ( g.my_rank == 0 && g.print >= 0 ) {
+      if ( test > EPS_PRECISION )
+        printf("\x1b[31m");
+      printf(format, depth, test);
+      if ( test > EPS_PRECISION )
+        printf("\x1b[0m");
+      if ( test > g.test )
+        g.test = test;
+      fflush(0);
+    }
   }
   
 #endif

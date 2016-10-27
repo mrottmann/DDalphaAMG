@@ -63,8 +63,8 @@
   static inline void coarse_hopp_PRECISION_vectorized( vector_PRECISION eta, vector_PRECISION phi,
       OPERATOR_TYPE_PRECISION *D, level_struct *l ) {
 #ifdef VECTORIZE_COARSE_OPERATOR_PRECISION
-    int lda = SIMD_LENGTH_PRECISION*((l->num_lattice_site_var+SIMD_LENGTH_PRECISION-1)/SIMD_LENGTH_PRECISION);
-    cgenmv(l->num_lattice_site_var, D, lda, (float *)phi, (float *)eta);
+    int lda = SIMD_LENGTH_PRECISION*((2*l->num_parent_eig_vect+SIMD_LENGTH_PRECISION-1)/SIMD_LENGTH_PRECISION);
+    cgenmv(2*l->num_parent_eig_vect, D, lda, (float *)phi, (float *)eta);
 #endif
   }
   static inline void coarse_n_hopp_PRECISION_vectorized( vector_PRECISION eta, vector_PRECISION phi,

@@ -27,7 +27,7 @@ struct Thread;
   typedef complex_double ******SU3_storage;
 
   void compute_clover_term ( SU3_storage U, level_struct *l );
-void dirac_setup( config_double hopp, level_struct *l );
+  void dirac_setup( config_double hopp, level_struct *l );
   
   void SU3_storage_alloc( SU3_storage *U, level_struct *l );
   void SU3_storage_free( SU3_storage *U, level_struct *l );
@@ -47,8 +47,9 @@ void dirac_setup( config_double hopp, level_struct *l );
   void set_clover( complex_double *q_store, int mu, int nu, int index, config_double clover );
   
   void define_odd_even_table( level_struct *l );
-  void scale_clover( operator_double_struct *op, double scale_even, double scale_odd, level_struct *l );
-  void shift_update( complex_double shift, level_struct *l, struct Thread *threading );
-  void optimized_shift_update( complex_double mass_shift, level_struct *l, struct Thread *threading );
+  void m0_update( double m0, level_struct *l, struct Thread *threading );
+  void tm_term_update( double mu, level_struct *l, struct Thread *threading );
+  void epsbar_term_update( level_struct *l, struct Thread *threading );
+  void finalize_operator_update( level_struct *l, struct Thread *threading );
 
 #endif

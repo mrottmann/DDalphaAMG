@@ -46,10 +46,14 @@ void gathering_PRECISION_setup( gathering_PRECISION_struct *gs, level_struct *l 
   // define data merging
   // define data gathering permutation
   int i, mu, current_rank, offset, offset_sum,
-      process_coords[4] = {0,0,0,0}, parent_coords[4] = {0,0,0,0}, *process_list = NULL;
+       process_coords[4] = {0,0,0,0}, parent_coords[4] = {0,0,0,0}, *process_list = NULL;
   MALLOC( process_list, int, l->num_processes );
+#ifdef HAVE_TM1p1
+  MALLOC( gs->transfer_buffer, complex_PRECISION, 2 * gs->dist_inner_lattice_sites * l->num_lattice_site_var );
+#else
   MALLOC( gs->transfer_buffer, complex_PRECISION, gs->dist_inner_lattice_sites * l->num_lattice_site_var );
-  
+#endif  
+
   l->idle = 0;
   i = 0;
   for ( process_coords[T]=0; process_coords[T]<g.process_grid[T]; process_coords[T]++ )
@@ -57,7 +61,7 @@ void gathering_PRECISION_setup( gathering_PRECISION_struct *gs, level_struct *l 
       for ( process_coords[Y]=0; process_coords[Y]<g.process_grid[Y]; process_coords[Y]++ )
         for ( process_coords[X]=0; process_coords[X]<g.process_grid[X]; process_coords[X]++ ) {
 
-	  g.Cart_rank( g.comm_cart, process_coords, &current_rank );
+          g.Cart_rank( g.comm_cart, process_coords, &current_rank );
 
           offset_sum = 0;
           for ( mu=0; mu<4; mu++ ) {
@@ -67,7 +71,7 @@ void gathering_PRECISION_setup( gathering_PRECISION_struct *gs, level_struct *l 
           }
           // get parent rank
           if ( current_rank == g.my_rank ) {
-	    g.Cart_rank( g.comm_cart, parent_coords, &(l->parent_rank) );
+            g.Cart_rank( g.comm_cart, parent_coords, &(l->parent_rank) );
             // find out if current process is supposed to idle
             if ( offset_sum > 0 )
               l->idle = 1;
@@ -91,7 +95,11 @@ void gathering_PRECISION_setup( gathering_PRECISION_struct *gs, level_struct *l 
     MALLOC( gs->gather_list, int, gs->gather_list_length );
     MALLOC( gs->permutation, int, l->num_inner_lattice_sites );
     MALLOC( gs->reqs, MPI_Request, gs->gather_list_length );
+#ifdef HAVE_TM1p1
+    MALLOC( gs->buffer, complex_PRECISION, 2*l->inner_vector_size );
+#else
     MALLOC( gs->buffer, complex_PRECISION, l->inner_vector_size );
+#endif
     MALLOC( field1, int, l->num_inner_lattice_sites );
     MALLOC( field2, int, l->num_inner_lattice_sites );
     
@@ -112,7 +120,7 @@ void gathering_PRECISION_setup( gathering_PRECISION_struct *gs, level_struct *l 
             for ( mu=0; mu<4; mu++ )
               process_coords[mu] = g.my_coords[mu] + *(count[mu]) * (l->comm_offset[mu]/merge[mu]);
 
-	    g.Cart_rank( g.comm_cart, process_coords, gs->gather_list + j );
+            g.Cart_rank( g.comm_cart, process_coords, gs->gather_list + j );
 
             j++;
             
@@ -204,12 +212,20 @@ void gathering_PRECISION_free( gathering_PRECISION_struct *gs, level_struct *l )
     FREE( gs->gather_list, int, gs->gather_list_length );
     FREE( gs->permutation, int, l->num_inner_lattice_sites );
     FREE( gs->reqs, MPI_Request, gs->gather_list_length );
+#ifdef HAVE_TM1p1
+    FREE( gs->buffer, complex_PRECISION, 2*l->inner_vector_size );
+#else
     FREE( gs->buffer, complex_PRECISION, l->inner_vector_size );
+#endif
     MPI_Comm_free( &(gs->level_comm) );
     MPI_Group_free( &(gs->level_comm_group) );
   }
   
+#ifdef HAVE_TM1p1
+  FREE( gs->transfer_buffer, complex_PRECISION, 2 * gs->dist_inner_lattice_sites * l->num_lattice_site_var );
+#else
   FREE( gs->transfer_buffer, complex_PRECISION, gs->dist_inner_lattice_sites * l->num_lattice_site_var );
+#endif
 }
 
 
@@ -218,18 +234,34 @@ void conf_PRECISION_gather( operator_PRECISION_struct *out, operator_PRECISION_s
   int send_size_hopp = l->gs_PRECISION.dist_inner_lattice_sites * 4 * SQUARE( l->num_lattice_site_var ),
       send_size_clov = l->gs_PRECISION.dist_inner_lattice_sites * ( (l->num_lattice_site_var*(l->num_lattice_site_var+1))/2 );
 #ifdef HAVE_TM
-    int send_size_block = l->gs_PRECISION.dist_inner_lattice_sites * ( (l->num_lattice_site_var/2*(l->num_lattice_site_var/2+1)) );
+  int send_size_block = l->gs_PRECISION.dist_inner_lattice_sites * ( (l->num_lattice_site_var/2*(l->num_lattice_site_var/2+1)) );
+  out->mu = in->mu;
+  out->mu_even_shift = in->mu_even_shift;
+  out->mu_odd_shift = in->mu_odd_shift;
 #endif
-  
+  out->m0 = in->m0;
+#ifdef HAVE_TM1p1
+  out->epsbar = in->epsbar;
+  out->epsbar_ig5_even_shift = in->epsbar_ig5_even_shift;
+  out->epsbar_ig5_odd_shift = in->epsbar_ig5_odd_shift;
+#endif
+
   if ( g.my_rank != l->parent_rank ) {
-    MPI_Request req;
-#ifdef HAVE_TM
-    MPI_Request tm_req, odd_req;
-    MPI_Isend( in->tm_term, send_size_block, MPI_COMPLEX_PRECISION, l->parent_rank, 2, g.comm_cart, &tm_req );
-    MPI_Isend( in->odd_proj, send_size_block, MPI_COMPLEX_PRECISION, l->parent_rank, 3, g.comm_cart, &odd_req );
+    MPI_Request req, odd_req;
+#ifdef HAVE_TM1p1
+    MPI_Request eps_req;
+    MPI_Isend( in->epsbar_term, send_size_block, MPI_COMPLEX_PRECISION, l->parent_rank, 4, g.comm_cart, &eps_req );
 #endif
+#ifdef HAVE_TM
+    MPI_Request tm_req;
+    MPI_Isend( in->tm_term, send_size_block, MPI_COMPLEX_PRECISION, l->parent_rank, 3, g.comm_cart, &tm_req );
+#endif
+    MPI_Isend( in->odd_proj, send_size_block, MPI_COMPLEX_PRECISION, l->parent_rank, 2, g.comm_cart, &odd_req );
     MPI_Isend( in->D, send_size_hopp, MPI_COMPLEX_PRECISION, l->parent_rank, 0, g.comm_cart, &req );
     MPI_Send( in->clover, send_size_clov, MPI_COMPLEX_PRECISION, l->parent_rank, 1, g.comm_cart );
+#ifdef HAVE_TM1p1
+    MPI_Wait( &eps_req, MPI_STATUS_IGNORE );
+#endif
 #ifdef HAVE_TM
     MPI_Wait( &tm_req, MPI_STATUS_IGNORE );
     MPI_Wait( &odd_req, MPI_STATUS_IGNORE );
@@ -238,43 +270,54 @@ void conf_PRECISION_gather( operator_PRECISION_struct *out, operator_PRECISION_s
   } else {
     int i, j, n=l->gs_PRECISION.gather_list_length, s=l->num_inner_lattice_sites,
         t, *pi = l->gs_PRECISION.permutation;
-    vector_PRECISION buffer_hopp = NULL, buffer_clov = NULL;
-    MPI_Request *hopp_reqs = NULL, *clov_reqs = NULL;
+    vector_PRECISION buffer_hopp = NULL, buffer_clov = NULL, buffer_odd_proj = NULL;
+    MPI_Request *hopp_reqs = NULL, *clov_reqs = NULL, *odd_proj_reqs = NULL;
     
+#ifdef HAVE_TM1p1
+    vector_PRECISION buffer_eps_term = NULL;
+    MPI_Request *eps_term_reqs = NULL;
+    MALLOC( buffer_eps_term, complex_PRECISION, n*send_size_block );
+    MALLOC( eps_term_reqs, MPI_Request, n );
+#endif
 #ifdef HAVE_TM
-    vector_PRECISION buffer_tm_term = NULL, buffer_odd_proj = NULL;
-    MPI_Request *tm_term_reqs = NULL, *odd_proj_reqs = NULL;
+    vector_PRECISION buffer_tm_term = NULL;
+    MPI_Request *tm_term_reqs = NULL;
     MALLOC( buffer_tm_term, complex_PRECISION, n*send_size_block );
-    MALLOC( buffer_odd_proj, complex_PRECISION, n*send_size_block );
     MALLOC( tm_term_reqs, MPI_Request, n );
-    MALLOC( odd_proj_reqs, MPI_Request, n );
 #endif
     MALLOC( buffer_hopp, complex_PRECISION, n*send_size_hopp );
     MALLOC( buffer_clov, complex_PRECISION, n*send_size_clov );
+    MALLOC( buffer_odd_proj, complex_PRECISION, n*send_size_block );
     MALLOC( hopp_reqs, MPI_Request, n );
     MALLOC( clov_reqs, MPI_Request, n );
+    MALLOC( odd_proj_reqs, MPI_Request, n );
     
     PROF_PRECISION_START( _GD_COMM );
     for ( i=1; i<n; i++ ) {
+#ifdef HAVE_TM1p1
+      MPI_Irecv( buffer_eps_term+i*send_size_block, send_size_block, MPI_COMPLEX_PRECISION,
+                 l->gs_PRECISION.gather_list[i], 4, g.comm_cart, &(eps_term_reqs[i]) );
+#endif
 #ifdef HAVE_TM
       MPI_Irecv( buffer_tm_term+i*send_size_block, send_size_block, MPI_COMPLEX_PRECISION,
-                 l->gs_PRECISION.gather_list[i], 2, g.comm_cart, &(tm_term_reqs[i]) );
-      MPI_Irecv( buffer_odd_proj+i*send_size_block, send_size_block, MPI_COMPLEX_PRECISION,
-                 l->gs_PRECISION.gather_list[i], 3, g.comm_cart, &(odd_proj_reqs[i]) );      
+                 l->gs_PRECISION.gather_list[i], 3, g.comm_cart, &(tm_term_reqs[i]) );
 #endif
       MPI_Irecv( buffer_hopp+i*send_size_hopp, send_size_hopp, MPI_COMPLEX_PRECISION,
                  l->gs_PRECISION.gather_list[i], 0, g.comm_cart, &(hopp_reqs[i]) );
       MPI_Irecv( buffer_clov+i*send_size_clov, send_size_clov, MPI_COMPLEX_PRECISION,
                  l->gs_PRECISION.gather_list[i], 1, g.comm_cart, &(clov_reqs[i]) );
+      MPI_Irecv( buffer_odd_proj+i*send_size_block, send_size_block, MPI_COMPLEX_PRECISION,
+                 l->gs_PRECISION.gather_list[i], 2, g.comm_cart, &(odd_proj_reqs[i]) );      
     }
     PROF_PRECISION_STOP( _GD_COMM, 2*n-2 );
-    
+
+#ifdef HAVE_TM1p1
+    for ( i=0; i<send_size_block; i++ )
+      buffer_eps_term[i] = in->epsbar_term[i];
+#endif
 #ifdef HAVE_TM
     for ( i=0; i<send_size_block; i++ )
-      buffer_tm_term[i] = in->tm_term[i];
-    
-    for ( i=0; i<send_size_block; i++ )
-      buffer_odd_proj[i] = in->odd_proj[i];
+      buffer_tm_term[i] = in->tm_term[i];    
 #endif
     
     for ( i=0; i<send_size_hopp; i++ )
@@ -283,6 +326,20 @@ void conf_PRECISION_gather( operator_PRECISION_struct *out, operator_PRECISION_s
     for ( i=0; i<send_size_clov; i++ )
       buffer_clov[i] = in->clover[i];
     
+    for ( i=0; i<send_size_block; i++ )
+      buffer_odd_proj[i] = in->odd_proj[i];
+
+#ifdef HAVE_TM1p1
+    PROF_PRECISION_START( _GD_IDLE );
+    for ( i=1; i<n; i++ )
+      MPI_Wait( &(eps_term_reqs[i]), MPI_STATUS_IGNORE );
+    PROF_PRECISION_STOP( _GD_IDLE, n-1 );
+    
+    t = (send_size_block*n)/s;
+    for ( i=0; i<s; i++ )
+      for ( j=0; j<t; j++ )
+        out->epsbar_term[ t*pi[i] + j ] = buffer_eps_term[ t*i + j ];
+#endif
 #ifdef HAVE_TM
     PROF_PRECISION_START( _GD_IDLE );
     for ( i=1; i<n; i++ )
@@ -293,16 +350,6 @@ void conf_PRECISION_gather( operator_PRECISION_struct *out, operator_PRECISION_s
     for ( i=0; i<s; i++ )
       for ( j=0; j<t; j++ )
         out->tm_term[ t*pi[i] + j ] = buffer_tm_term[ t*i + j ];
-
-    PROF_PRECISION_START( _GD_IDLE );
-    for ( i=1; i<n; i++ )
-      MPI_Wait( &(odd_proj_reqs[i]), MPI_STATUS_IGNORE );
-    PROF_PRECISION_STOP( _GD_IDLE, n-1 );
-    
-    t = (send_size_block*n)/s;
-    for ( i=0; i<s; i++ )
-      for ( j=0; j<t; j++ )
-        out->odd_proj[ t*pi[i] + j ] = buffer_odd_proj[ t*i + j ];
 #endif
 
     PROF_PRECISION_START( _GD_IDLE );
@@ -324,20 +371,34 @@ void conf_PRECISION_gather( operator_PRECISION_struct *out, operator_PRECISION_s
     for ( i=0; i<s; i++ )
       for ( j=0; j<t; j++ )
         out->clover[ t*pi[i] + j ] = buffer_clov[ t*i + j ];
+
+    PROF_PRECISION_START( _GD_IDLE );
+    for ( i=1; i<n; i++ )
+      MPI_Wait( &(odd_proj_reqs[i]), MPI_STATUS_IGNORE );
+    PROF_PRECISION_STOP( _GD_IDLE, n-1 );
+    
+    t = (send_size_block*n)/s;
+    for ( i=0; i<s; i++ )
+      for ( j=0; j<t; j++ )
+        out->odd_proj[ t*pi[i] + j ] = buffer_odd_proj[ t*i + j ];
       
     FREE( buffer_hopp, complex_PRECISION, n*send_size_hopp );
     FREE( buffer_clov, complex_PRECISION, n*send_size_clov );
+    FREE( buffer_odd_proj, complex_PRECISION, n*send_size_block );
     FREE( hopp_reqs, MPI_Request, n );
     FREE( clov_reqs, MPI_Request, n );
+    FREE( odd_proj_reqs, MPI_Request, n );
 #ifdef HAVE_TM
     FREE( buffer_tm_term, complex_PRECISION, n*send_size_block );
-    FREE( buffer_odd_proj, complex_PRECISION, n*send_size_block );
     FREE( tm_term_reqs, MPI_Request, n );
-    FREE( odd_proj_reqs, MPI_Request, n );
 #endif
+#ifdef HAVE_TM1p1
+    FREE( buffer_eps_term, complex_PRECISION, n*send_size_block );
+    FREE( eps_term_reqs, MPI_Request, n );
+#endif
+
   }
   l->dummy_p_PRECISION.op = out;
-  l->dummy_p_PRECISION.shift = 0;
   l->dummy_p_PRECISION.v_start = 0;
   l->dummy_p_PRECISION.v_end = l->inner_vector_size;
   

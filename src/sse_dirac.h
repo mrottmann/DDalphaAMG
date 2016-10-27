@@ -32,6 +32,15 @@ void pbn_float( complex_float *eta, complex_float *prp[4], int start, int end );
 void su3_pbp_double( complex_double* eta, complex_double *prn[4], operator_double_struct *op, int *neighbor, int start, int end );
 void su3_pbp_float( complex_float* eta, complex_float *prn[4], operator_float_struct *op, int *neighbor, int start, int end );
 
+void dprp_double( complex_double *prn[4], complex_double *phi, int start, int end );
+void dprp_float( complex_float *prn[4], complex_float *phi, int start, int end );
+void dprn_su3_double( complex_double *prp[4], complex_double *phi, operator_double_struct *op, int *neighbor, int start, int end );
+void dprn_su3_float( complex_float *prp[4], complex_float *phi, operator_float_struct *op, int *neighbor, int start, int end );
+void dpbn_double( complex_double *eta, complex_double *prp[4], int start, int end );
+void dpbn_float( complex_float *eta, complex_float *prp[4], int start, int end );
+void su3_dpbp_double( complex_double* eta, complex_double *prn[4], operator_double_struct *op, int *neighbor, int start, int end );
+void su3_dpbp_float( complex_float* eta, complex_float *prn[4], operator_float_struct *op, int *neighbor, int start, int end );
+
 void block_oddeven_plus_coupling_double( double *eta, double *D, double *phi, int mu,
                                          int start, int end, int *ind, int *neighbor );
 void block_oddeven_plus_coupling_float( float *eta, float *D, float *phi, int mu,
@@ -66,17 +75,25 @@ void boundary_nplus_coupling_float( float *eta, float *D, float *phi, int mu,
                                             int start, int end, int *ind, int *neighbor );
 
 void sse_set_clover_double( double *out, complex_double *in );
-void sse_set_clover_float( float *out, complex_double *in );
-void sse_site_clover_double( double *eta, const double *phi, const double *clover );
-void sse_site_clover_float( float *eta, const float *phi, float *clover );
+void sse_set_clover_float( float *out, complex_float *in );
+void sse_set_clover_doublet_double( double *out, complex_double *in );
+void sse_set_clover_doublet_float( float *out, complex_float *in );
+void sse_add_diagonal_clover_double( double *out, complex_double *diag );
+void sse_add_diagonal_clover_float( float *out, complex_float *diag );
+void sse_add_diagonal_clover_doublet_double( double *out, complex_double *diag );
+void sse_add_diagonal_clover_doublet_float( float *out, complex_float *diag );
 void sse_clover_double( vector_double eta, vector_double phi, operator_double_struct *op, int start, int end, level_struct *l, struct Thread *threading );
 void sse_clover_float( vector_float eta, vector_float phi, operator_float_struct *op, int start, int end, level_struct *l, struct Thread *threading );
+void sse_site_clover_double( double *eta, const double *phi, const double *clover );
+void sse_site_clover_float( float *eta, const float *phi, float *clover );
+void sse_site_clover_doublet_double( double *eta, const double *phi, const double *clover );
+void sse_site_clover_doublet_float( float *eta, const float *phi, float *clover );
 
 void sse_site_clover_invert_double( double *clover_in, double *clover_out );
 void sse_site_clover_invert_float( float *clover_in, float *clover_out );
+void sse_site_clover_doublet_invert_double( double *clover_in, config_double eps_term, double *clover_out );
+void sse_site_clover_doublet_invert_float( float *clover_in, config_float eps_term, float *clover_out );
 
-void sse_add_diagonal_clover_double( double *out, complex_double *diag );
-void sse_add_diagonal_clover_float( float *out, complex_double *diag );
 
 static inline void sse_mvm_double_simd_length( const complex_double *eta, const complex_double *D, const complex_double *phi ) {}
 

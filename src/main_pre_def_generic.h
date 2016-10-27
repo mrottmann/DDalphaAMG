@@ -45,10 +45,9 @@
   } gathering_PRECISION_struct;
   
   typedef struct {
-    config_PRECISION D, clover, oe_clover;
-#ifdef HAVE_TM
-    config_PRECISION odd_proj, tm_term;
-#endif
+    double m0;
+    config_PRECISION D, clover, clover_oo_inv;
+    config_PRECISION odd_proj; //identity on the odd sites
     int oe_offset, self_coupling, num_even_sites, num_odd_sites,
         *index_table, *neighbor_table, *translation_table, table_dim[4],
         *backward_neighbor_table,
@@ -58,12 +57,22 @@
     OPERATOR_TYPE_PRECISION *D_vectorized;
     OPERATOR_TYPE_PRECISION *D_transformed_vectorized;
     OPERATOR_TYPE_PRECISION *clover_vectorized;
-    OPERATOR_TYPE_PRECISION *oe_clover_vectorized;
+    OPERATOR_TYPE_PRECISION *clover_oo_inv_vectorized;
+#ifdef HAVE_TM
+    double mu, mu_odd_shift, mu_even_shift;
+    config_PRECISION tm_term;
+#endif
+#ifdef HAVE_TM1p1
+    double epsbar, epsbar_ig5_odd_shift, epsbar_ig5_even_shift;
+    config_PRECISION epsbar_term, clover_doublet, clover_doublet_oo_inv;
+    OPERATOR_TYPE_PRECISION *clover_doublet_vectorized;
+    OPERATOR_TYPE_PRECISION *clover_doublet_oo_inv_vectorized;
+#endif
   } operator_PRECISION_struct;
   
   typedef struct {
     vector_PRECISION x, b, r, w, *V, *Z;
-    complex_PRECISION **H, *y, *gamma, *c, *s, shift;
+    complex_PRECISION **H, *y, *gamma, *c, *s;
     config_PRECISION *D, *clover;
     operator_PRECISION_struct *op;
     PRECISION tol;
@@ -75,7 +84,7 @@
   
   typedef struct {
     operator_PRECISION_struct op;
-    vector_PRECISION buf1, buf2, buf3, buf4, buf5, bbuf1, bbuf2, bbuf3, oe_bbuf[6];
+    vector_PRECISION buf1, buf2, buf3, buf4, buf5;
     vector_PRECISION oe_buf[4];
     vector_PRECISION local_minres_buffer[3];
     int block_oe_offset, *index[4], dir_length[4], num_blocks, num_colors,
