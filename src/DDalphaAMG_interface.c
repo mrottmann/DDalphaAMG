@@ -640,6 +640,7 @@ static inline void DDalphaAMG_driver( double *vector1_out, double *vector1_in, d
 
   for (i=0; i<4; i++)
     sl[i] = ll[i]*g.my_coords[i];
+ 
   for (t=0, j=0; t<ll[T]; t++) {
     if (g.bc==_TWISTED) phase[T] = g.twisted_bc[T]*((double)sl[T]+t)/(double)gl[T];
     for (z=0; z<ll[Z]; z++) {
@@ -712,14 +713,15 @@ static inline void DDalphaAMG_driver( double *vector1_out, double *vector1_in, d
       }
     }
   }
-
+   
 #ifndef INIT_ONE_PREC
+    
   double gvmin, gvmax;
   if(g.mixed_precision==2) {
     MPI_Allreduce(&vmin, &gvmin, 1, MPI_DOUBLE, MPI_MIN, g.comm_cart);
     MPI_Allreduce(&vmax, &gvmax, 1, MPI_DOUBLE, MPI_MAX, g.comm_cart);
   }
- 
+  
   //switching to double precision on the fine level
   if(g.mixed_precision==2 && gvmin/gvmax<EPS_float) {
     warning0("Changing solver precision on fine level due to rhs elements (min/max=%e)\n", vmin/vmax);
@@ -734,7 +736,7 @@ static inline void DDalphaAMG_driver( double *vector1_out, double *vector1_in, d
     p->tol = g.p_MP.dp.tol;
   } else precision_changed = 0;
 #endif
-    
+
   switch(_TYPE) {
     
   case _SOLVE :
