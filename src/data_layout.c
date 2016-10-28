@@ -97,7 +97,7 @@ void data_layout_n_flavours( int nf, level_struct *l, struct Thread *threading )
       } 
     }
     
-    if ( l_tmp->next_level == NULL )
+    if ( l->level == 0 || l_tmp->next_level == NULL )
       break;
 
     l_tmp = l_tmp->next_level;

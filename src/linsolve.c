@@ -227,7 +227,7 @@ int fgmres_MP( gmres_MP_struct *p, level_struct *l, struct Thread *threading ) {
       
       if ( cabs( p->dp.H[j][j+1] ) > 1E-15 ) {
         qr_update_double( p->dp.H, p->dp.s, p->dp.c, p->dp.gamma, j, l, threading );
-        gamma_jp1 = cabs( p->dp.gamma[j+1] );	  
+        gamma_jp1 = cabs( p->dp.gamma[j+1] );          
         
         if ( iter%10 == 0 || p->sp.preconditioner != NULL || l->depth > 0 ) {
 #if defined(TRACK_RES) && !defined(WILSON_BENCHMARK)

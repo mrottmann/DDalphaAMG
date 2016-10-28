@@ -628,8 +628,8 @@ void coarse_oddeven_setup_PRECISION_set_couplings( operator_PRECISION_struct *in
       n_per_core, l->num_parent_eig_vect);
   if ( op->epsbar != 0 || op->epsbar_ig5_odd_shift != 0 || op->epsbar_ig5_odd_shift != 0 )
     add_eps_term_to_doublet_vectorized_layout_PRECISION( op->epsbar_term + start*eps_size,
-							 op->clover_doublet_vectorized + start*offset_v_doublet,
-							 n_per_core, l->num_parent_eig_vect);
+                                                         op->clover_doublet_vectorized + start*offset_v_doublet,
+                                                         n_per_core, l->num_parent_eig_vect);
 #endif
 
  SYNC_CORES(threading)

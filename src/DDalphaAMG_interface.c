@@ -250,9 +250,9 @@ void DDalphaAMG_update_parameters( DDalphaAMG_parameters *mg_params, DDalphaAMG_
     g.m0 = m0;
     THREADED(threading[0]->n_core)
       if ( g.setup_flag )
-	m0_update( g.m0, &l, threading[omp_get_thread_num()] );
+        m0_update( g.m0, &l, threading[omp_get_thread_num()] );
       else if ( g.conf_flag )
-	m0_update_double( g.m0, &(g.op_double), &l, threading[omp_get_thread_num()] );
+        m0_update_double( g.m0, &(g.op_double), &l, threading[omp_get_thread_num()] );
     re_dirac++;
   }
   
@@ -276,9 +276,9 @@ void DDalphaAMG_update_parameters( DDalphaAMG_parameters *mg_params, DDalphaAMG_
     g.mu_odd_shift = mg_params->mu_odd_shift;
     THREADED(threading[0]->n_core)
       if ( g.setup_flag )
-	tm_term_update( g.mu, &l, threading[omp_get_thread_num()] );
+        tm_term_update( g.mu, &l, threading[omp_get_thread_num()] );
       else if ( g.conf_flag )
-	tm_term_double_setup( g.mu, g.mu_even_shift, g.mu_odd_shift, &(g.op_double), &l, threading[omp_get_thread_num()] ); 
+        tm_term_double_setup( g.mu, g.mu_even_shift, g.mu_odd_shift, &(g.op_double), &l, threading[omp_get_thread_num()] ); 
     re_dirac++;
   }
   
@@ -302,9 +302,9 @@ void DDalphaAMG_update_parameters( DDalphaAMG_parameters *mg_params, DDalphaAMG_
     g.epsbar_ig5_odd_shift = mg_params->epsbar_ig5_odd_shift;
     THREADED(threading[0]->n_core)
       if ( g.setup_flag )
-	epsbar_term_update( &l, threading[omp_get_thread_num()] );
+        epsbar_term_update( &l, threading[omp_get_thread_num()] );
       else if ( g.conf_flag )
-	epsbar_term_double_setup( g.epsbar, g.epsbar_ig5_even_shift, g.epsbar_ig5_odd_shift, &(g.op_double), &l, threading[omp_get_thread_num()] ); 
+        epsbar_term_double_setup( g.epsbar, g.epsbar_ig5_even_shift, g.epsbar_ig5_odd_shift, &(g.op_double), &l, threading[omp_get_thread_num()] ); 
     re_dirac++;
   }
   
@@ -400,16 +400,16 @@ void DDalphaAMG_change_epsbar_shift_sign( DDalphaAMG_status *mg_status ) {
     if (g.conf_flag && !g.setup_flag ) {
       
       THREADED(threading[0]->n_core) {
-	tm_term_double_setup( g.mu, g.mu_even_shift, g.mu_odd_shift, &(g.op_double),
-			      &l, threading[omp_get_thread_num()]);
-	epsbar_term_double_setup( g.epsbar, g.epsbar_ig5_even_shift, g.epsbar_ig5_odd_shift, &(g.op_double),
-				  &l, threading[omp_get_thread_num()]);
+        tm_term_double_setup( g.mu, g.mu_even_shift, g.mu_odd_shift, &(g.op_double),
+                              &l, threading[omp_get_thread_num()]);
+        epsbar_term_double_setup( g.epsbar, g.epsbar_ig5_even_shift, g.epsbar_ig5_odd_shift, &(g.op_double),
+                                  &l, threading[omp_get_thread_num()]);
       }
     } else if (g.conf_flag && g.setup_flag )
       THREADED(threading[0]->n_core) {
-	tm_term_update( g.mu, &l, threading[omp_get_thread_num()] );
-	epsbar_term_update( &l, threading[omp_get_thread_num()] );
-	finalize_operator_update( &l, threading[omp_get_thread_num()] );
+        tm_term_update( g.mu, &l, threading[omp_get_thread_num()] );
+        epsbar_term_update( &l, threading[omp_get_thread_num()] );
+        finalize_operator_update( &l, threading[omp_get_thread_num()] );
       }
   }
   t1 = MPI_Wtime();
@@ -754,12 +754,12 @@ static inline void DDalphaAMG_driver( double *vector1_out, double *vector1_in, d
     THREADED(threading[0]->n_core) {
 #ifdef HAVE_TM1p1
       if(g.n_flavours==2) 
-	// sol = (D_h^{-1})*g5*tau1*(D_h^{-1})*g5*tau1*rhs
-	tau1_gamma5_double( rhs, rhs, &l, threading[omp_get_thread_num()] );
+        // sol = (D_h^{-1})*g5*tau1*(D_h^{-1})*g5*tau1*rhs
+        tau1_gamma5_double( rhs, rhs, &l, threading[omp_get_thread_num()] );
       else
 #endif
-	// sol = (D_d^{-1})*g5*(D_u^{-1})*g5*rhs
-	gamma5_double( rhs, rhs, &l, threading[omp_get_thread_num()] );
+        // sol = (D_d^{-1})*g5*(D_u^{-1})*g5*rhs
+        gamma5_double( rhs, rhs, &l, threading[omp_get_thread_num()] );
       if ( g.method == -1 ) {
         cgn_double( &(g.p), &l, threading[omp_get_thread_num()] );
       } else if ( g.mixed_precision == 2 ) {
@@ -770,10 +770,10 @@ static inline void DDalphaAMG_driver( double *vector1_out, double *vector1_in, d
       
 #ifdef HAVE_TM1p1
       if(g.n_flavours==2) 
-	tau1_gamma5_double(rhs, sol, &l, threading[omp_get_thread_num()] );
+        tau1_gamma5_double(rhs, sol, &l, threading[omp_get_thread_num()] );
       else
 #endif
-	gamma5_double(rhs, sol, &l, threading[omp_get_thread_num()] );
+        gamma5_double(rhs, sol, &l, threading[omp_get_thread_num()] );
     }
 #ifdef HAVE_TM1p1
     if(g.n_flavours==2) 
@@ -783,11 +783,11 @@ static inline void DDalphaAMG_driver( double *vector1_out, double *vector1_in, d
       DDalphaAMG_change_mu_sign( &tmp_status );
     THREADED(threading[0]->n_core) {
       if ( g.method == -1 ) {
-	cgn_double( &(g.p), &l, threading[omp_get_thread_num()] );
+        cgn_double( &(g.p), &l, threading[omp_get_thread_num()] );
       } else if ( g.mixed_precision == 2 ) {
-	fgmres_MP( &(g.p_MP), &l, threading[omp_get_thread_num()] );
+        fgmres_MP( &(g.p_MP), &l, threading[omp_get_thread_num()] );
       } else {
-	fgmres_double( &(g.p), &l, threading[omp_get_thread_num()] );
+        fgmres_double( &(g.p), &l, threading[omp_get_thread_num()] );
       }
     }
     // DDalphaAMG_change_mu_sign( &tmp_status );
@@ -799,12 +799,12 @@ static inline void DDalphaAMG_driver( double *vector1_out, double *vector1_in, d
     {
 #ifdef HAVE_TM1p1
       if(g.n_flavours==2) 
-	// sol = (D_h^{-1})*g5*tau1*(D_h^{-1})*g5*tau1*rhs
-	tau1_gamma5_set_even_to_zero_double(rhs, rhs, &l, threading[omp_get_thread_num()]);
+        // sol = (D_h^{-1})*g5*tau1*(D_h^{-1})*g5*tau1*rhs
+        tau1_gamma5_set_even_to_zero_double(rhs, rhs, &l, threading[omp_get_thread_num()]);
       else
 #endif
-	// sol = (D_d^{-1})*g5*(D_u^{-1})*g5*rhs
-	gamma5_set_even_to_zero_double(rhs, rhs, &l, threading[omp_get_thread_num()]);
+        // sol = (D_d^{-1})*g5*(D_u^{-1})*g5*rhs
+        gamma5_set_even_to_zero_double(rhs, rhs, &l, threading[omp_get_thread_num()]);
       if ( g.method == -1 ) {
         cgn_double( &(g.p), &l, threading[omp_get_thread_num()] );
       } else if ( g.mixed_precision == 2 ) {
@@ -814,10 +814,10 @@ static inline void DDalphaAMG_driver( double *vector1_out, double *vector1_in, d
       }
 #ifdef HAVE_TM1p1
       if(g.n_flavours==2) 
-	tau1_gamma5_set_even_to_zero_double(rhs, sol, &l, threading[omp_get_thread_num()]);
+        tau1_gamma5_set_even_to_zero_double(rhs, sol, &l, threading[omp_get_thread_num()]);
       else
 #endif
-	gamma5_set_even_to_zero_double(rhs, sol, &l, threading[omp_get_thread_num()]);
+        gamma5_set_even_to_zero_double(rhs, sol, &l, threading[omp_get_thread_num()]);
     }
 #ifdef HAVE_TM1p1
     if(g.n_flavours==2) 
@@ -827,11 +827,11 @@ static inline void DDalphaAMG_driver( double *vector1_out, double *vector1_in, d
       DDalphaAMG_change_mu_sign( &tmp_status );
     THREADED(threading[0]->n_core) {
       if ( g.method == -1 ) {
-	cgn_double( &(g.p), &l, threading[omp_get_thread_num()] );
+        cgn_double( &(g.p), &l, threading[omp_get_thread_num()] );
       } else if ( g.mixed_precision == 2 ) {
-	fgmres_MP( &(g.p_MP), &l, threading[omp_get_thread_num()] );
+        fgmres_MP( &(g.p_MP), &l, threading[omp_get_thread_num()] );
       } else {
-	fgmres_double( &(g.p), &l, threading[omp_get_thread_num()] );
+        fgmres_double( &(g.p), &l, threading[omp_get_thread_num()] );
       }
     }
     // DDalphaAMG_change_mu_sign( &tmp_status );
@@ -843,12 +843,12 @@ static inline void DDalphaAMG_driver( double *vector1_out, double *vector1_in, d
     {
 #ifdef HAVE_TM1p1
       if(g.n_flavours==2) 
-	// sol = (D_h^{-1})*g5*tau1*(D_h^{-1})*g5*tau1*rhs
-	tau1_gamma5_set_odd_to_zero_double(rhs, rhs, &l, threading[omp_get_thread_num()]);
+        // sol = (D_h^{-1})*g5*tau1*(D_h^{-1})*g5*tau1*rhs
+        tau1_gamma5_set_odd_to_zero_double(rhs, rhs, &l, threading[omp_get_thread_num()]);
       else
 #endif
-	// sol = (D_d^{-1})*g5*(D_u^{-1})*g5*rhs
-	gamma5_set_odd_to_zero_double(rhs, rhs, &l, threading[omp_get_thread_num()]);
+        // sol = (D_d^{-1})*g5*(D_u^{-1})*g5*rhs
+        gamma5_set_odd_to_zero_double(rhs, rhs, &l, threading[omp_get_thread_num()]);
       if ( g.method == -1 ) {
         cgn_double( &(g.p), &l, threading[omp_get_thread_num()] );
       } else if ( g.mixed_precision == 2 ) {
@@ -858,10 +858,10 @@ static inline void DDalphaAMG_driver( double *vector1_out, double *vector1_in, d
       }
 #ifdef HAVE_TM1p1
       if(g.n_flavours==2) 
-	tau1_gamma5_set_odd_to_zero_double(rhs, sol, &l, threading[omp_get_thread_num()]);
+        tau1_gamma5_set_odd_to_zero_double(rhs, sol, &l, threading[omp_get_thread_num()]);
       else
 #endif
-	gamma5_set_odd_to_zero_double(rhs, sol, &l, threading[omp_get_thread_num()]);
+        gamma5_set_odd_to_zero_double(rhs, sol, &l, threading[omp_get_thread_num()]);
     }
 #ifdef HAVE_TM1p1
     if(g.n_flavours==2) 
@@ -871,11 +871,11 @@ static inline void DDalphaAMG_driver( double *vector1_out, double *vector1_in, d
       DDalphaAMG_change_mu_sign( &tmp_status );
     THREADED(threading[0]->n_core) {
       if ( g.method == -1 ) {
-	cgn_double( &(g.p), &l, threading[omp_get_thread_num()] );
+        cgn_double( &(g.p), &l, threading[omp_get_thread_num()] );
       } else if ( g.mixed_precision == 2 ) {
-	fgmres_MP( &(g.p_MP), &l, threading[omp_get_thread_num()] );
+        fgmres_MP( &(g.p_MP), &l, threading[omp_get_thread_num()] );
       } else {
-	fgmres_double( &(g.p), &l, threading[omp_get_thread_num()] );
+        fgmres_double( &(g.p), &l, threading[omp_get_thread_num()] );
       }
     }
     // DDalphaAMG_change_mu_sign( &tmp_status );

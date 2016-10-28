@@ -45,6 +45,7 @@ void operator_PRECISION_init( operator_PRECISION_struct *op ) {
   op->epsbar_ig5_even_shift = 0;
   op->epsbar_ig5_odd_shift = 0;
   op->epsbar_term = NULL;
+  op->clover_doublet = NULL;
   op->clover_doublet_oo_inv = NULL;
   op->clover_doublet_vectorized = NULL;
   op->clover_doublet_oo_inv_vectorized = NULL;

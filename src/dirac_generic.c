@@ -684,10 +684,10 @@ void set_even_to_zero_PRECISION( vector_PRECISION eta, vector_PRECISION phi, lev
   if ( g.n_flavours == 2 )
     while ( eta < eta_end ) {
       if(g.odd_even_table[i]==_ODD) {
-	FOR24( *eta = (*phi); phi++; eta++; );
+        FOR24( *eta = (*phi); phi++; eta++; );
       }
       else if(g.odd_even_table[i]==_EVEN) {
-	FOR24( *eta = _COMPLEX_PRECISION_ZERO; phi++; eta++; );
+        FOR24( *eta = _COMPLEX_PRECISION_ZERO; phi++; eta++; );
       }
       i++;
     }
@@ -695,10 +695,10 @@ void set_even_to_zero_PRECISION( vector_PRECISION eta, vector_PRECISION phi, lev
 #endif
     while ( eta < eta_end ) {
       if(g.odd_even_table[i]==_ODD) {
-	FOR12( *eta = (*phi); phi++; eta++; );
+        FOR12( *eta = (*phi); phi++; eta++; );
       }
       else if(g.odd_even_table[i]==_EVEN) {
-	FOR12( *eta = _COMPLEX_PRECISION_ZERO; phi++; eta++; );
+        FOR12( *eta = _COMPLEX_PRECISION_ZERO; phi++; eta++; );
       }
       i++;
     }
@@ -717,11 +717,11 @@ void gamma5_set_even_to_zero_PRECISION( vector_PRECISION eta, vector_PRECISION p
   if ( g.n_flavours == 2 )
     while ( eta < eta_end ) {
       if(g.odd_even_table[i]==_ODD){
-	FOR12( *eta = -(*phi); phi++; eta++; );
-	FOR12( *eta = (*phi); phi++; eta++; );
+        FOR12( *eta = -(*phi); phi++; eta++; );
+        FOR12( *eta = (*phi); phi++; eta++; );
       }
       else if(g.odd_even_table[i]==_EVEN){
-	FOR24( *eta = _COMPLEX_PRECISION_ZERO; phi++; eta++; );
+        FOR24( *eta = _COMPLEX_PRECISION_ZERO; phi++; eta++; );
       }
       i++;
     }
@@ -729,11 +729,11 @@ void gamma5_set_even_to_zero_PRECISION( vector_PRECISION eta, vector_PRECISION p
 #endif
     while ( eta < eta_end ) {
       if(g.odd_even_table[i]==_ODD){
-	FOR6( *eta = -(*phi); phi++; eta++; );
-	FOR6( *eta = (*phi); phi++; eta++; );
+        FOR6( *eta = -(*phi); phi++; eta++; );
+        FOR6( *eta = (*phi); phi++; eta++; );
       }
       else if(g.odd_even_table[i]==_EVEN){
-	FOR12( *eta = _COMPLEX_PRECISION_ZERO; phi++; eta++; );
+        FOR12( *eta = _COMPLEX_PRECISION_ZERO; phi++; eta++; );
       }
       i++;
     }
@@ -753,18 +753,18 @@ void tau1_gamma5_set_even_to_zero_PRECISION( vector_PRECISION eta, vector_PRECIS
     complex_PRECISION b[6];
     while ( eta < eta_end ) {
       if(g.odd_even_table[i]==_ODD){
-	int i = 0;
-	FOR6( b[i] =  (*phi); phi++; i++;   );
-	FOR6( *eta = -(*phi); phi++; eta++; );
-	i = 0;
-	FOR6( *eta = - b[i] ; eta++; i++;   );
-	i = 0;
-	FOR6( b[i] =  (*phi); phi++; i++;   );
-	FOR6( *eta =  (*phi); phi++; eta++; );
-	i = 0;
-	FOR6( *eta =   b[i] ; eta++; i++;   );
+        int i = 0;
+        FOR6( b[i] =  (*phi); phi++; i++;   );
+        FOR6( *eta = -(*phi); phi++; eta++; );
+        i = 0;
+        FOR6( *eta = - b[i] ; eta++; i++;   );
+        i = 0;
+        FOR6( b[i] =  (*phi); phi++; i++;   );
+        FOR6( *eta =  (*phi); phi++; eta++; );
+        i = 0;
+        FOR6( *eta =   b[i] ; eta++; i++;   );
       } else if(g.odd_even_table[i]==_EVEN){
-	FOR24( *eta = _COMPLEX_PRECISION_ZERO; phi++; eta++; );
+        FOR24( *eta = _COMPLEX_PRECISION_ZERO; phi++; eta++; );
       }
       i++;
     }
@@ -789,10 +789,10 @@ void set_odd_to_zero_PRECISION( vector_PRECISION eta, vector_PRECISION phi, leve
   if ( g.n_flavours == 2 )
     while ( eta < eta_end ) {
       if(g.odd_even_table[i]==_EVEN){
-	FOR24( *eta = (*phi); phi++; eta++; );
+        FOR24( *eta = (*phi); phi++; eta++; );
       }
       else if(g.odd_even_table[i]==_ODD){
-	FOR24( *eta = 0; phi++; eta++; );
+        FOR24( *eta = 0; phi++; eta++; );
       }
       i++;
     }
@@ -800,10 +800,10 @@ void set_odd_to_zero_PRECISION( vector_PRECISION eta, vector_PRECISION phi, leve
 #endif
     while ( eta < eta_end ) {
       if(g.odd_even_table[i]==_EVEN) {
-	FOR12( *eta = (*phi); phi++; eta++; );
+        FOR12( *eta = (*phi); phi++; eta++; );
       }
       else if(g.odd_even_table[i]==_ODD) {
-	FOR12( *eta = 0; phi++; eta++; );
+        FOR12( *eta = 0; phi++; eta++; );
       }
       i++;
     }
@@ -820,11 +820,11 @@ void gamma5_set_odd_to_zero_PRECISION( vector_PRECISION eta, vector_PRECISION ph
   if ( g.n_flavours == 2 )
     while ( eta < eta_end ) {
       if(g.odd_even_table[i]==_EVEN){
-	FOR12( *eta = -(*phi); phi++; eta++; );
-	FOR12( *eta = (*phi); phi++; eta++; );
+        FOR12( *eta = -(*phi); phi++; eta++; );
+        FOR12( *eta = (*phi); phi++; eta++; );
       }
       else if(g.odd_even_table[i]==_ODD){
-	FOR24( *eta = 0; phi++; eta++; );
+        FOR24( *eta = 0; phi++; eta++; );
       }
       i++;
     }
@@ -832,11 +832,11 @@ void gamma5_set_odd_to_zero_PRECISION( vector_PRECISION eta, vector_PRECISION ph
 #endif
     while ( eta < eta_end ) {
       if(g.odd_even_table[i]==_EVEN){
-	FOR6( *eta = -(*phi); phi++; eta++; );
-	FOR6( *eta = (*phi); phi++; eta++; );
+        FOR6( *eta = -(*phi); phi++; eta++; );
+        FOR6( *eta = (*phi); phi++; eta++; );
       }
       else if(g.odd_even_table[i]==_ODD){
-	FOR12( *eta = 0; phi++; eta++; );
+        FOR12( *eta = 0; phi++; eta++; );
       }
       i++;
     }
@@ -856,18 +856,18 @@ void tau1_gamma5_set_odd_to_zero_PRECISION( vector_PRECISION eta, vector_PRECISI
     complex_PRECISION b[6];
     while ( eta < eta_end ) {
       if(g.odd_even_table[i]==_EVEN){
-	int i = 0;
-	FOR6( b[i] =  (*phi); phi++; i++;   );
-	FOR6( *eta = -(*phi); phi++; eta++; );
-	i = 0;
-	FOR6( *eta = - b[i] ; eta++; i++;   );
-	i = 0;
-	FOR6( b[i] =  (*phi); phi++; i++;   );
-	FOR6( *eta =  (*phi); phi++; eta++; );
-	i = 0;
-	FOR6( *eta =   b[i] ; eta++; i++;   );
+        int i = 0;
+        FOR6( b[i] =  (*phi); phi++; i++;   );
+        FOR6( *eta = -(*phi); phi++; eta++; );
+        i = 0;
+        FOR6( *eta = - b[i] ; eta++; i++;   );
+        i = 0;
+        FOR6( b[i] =  (*phi); phi++; i++;   );
+        FOR6( *eta =  (*phi); phi++; eta++; );
+        i = 0;
+        FOR6( *eta =   b[i] ; eta++; i++;   );
       } else if(g.odd_even_table[i]==_ODD){
-	FOR24( *eta = _COMPLEX_PRECISION_ZERO; phi++; eta++; );
+        FOR24( *eta = _COMPLEX_PRECISION_ZERO; phi++; eta++; );
       }
       i++;
     }
@@ -1237,7 +1237,7 @@ void m0_update_PRECISION( PRECISION m0, operator_PRECISION_struct *op, level_str
 }
 
 void tm_term_PRECISION_setup( PRECISION mu, PRECISION even, PRECISION odd, operator_PRECISION_struct *op,
-			      level_struct *l, struct Thread *threading ) {
+                              level_struct *l, struct Thread *threading ) {
    
 #ifdef HAVE_TM
   if(threading->thread != 0)
@@ -1271,7 +1271,7 @@ void tm_term_PRECISION_setup( PRECISION mu, PRECISION even, PRECISION odd, opera
           tm_shift = shift;
         else
           tm_shift = shift + even_shift + odd_proj[0]*(odd_shift - even_shift);
-	FOR6( *tm_term = - tm_shift; tm_term++; )
+        FOR6( *tm_term = - tm_shift; tm_term++; )
         FOR6( *tm_term = tm_shift; tm_term++; )
         odd_proj += 12;
       }
@@ -1332,7 +1332,7 @@ void tm_term_PRECISION_setup( PRECISION mu, PRECISION even, PRECISION odd, opera
 }
 
 void epsbar_term_PRECISION_setup( PRECISION epsbar, PRECISION even, PRECISION odd, operator_PRECISION_struct *op,
-				  level_struct *l, struct Thread *threading ) {
+                                  level_struct *l, struct Thread *threading ) {
   
 #ifdef HAVE_TM1p1
   if(threading->thread != 0)
@@ -1387,7 +1387,7 @@ void epsbar_term_PRECISION_setup( PRECISION epsbar, PRECISION even, PRECISION od
             *eps_term = shift;
             eps_term++;
           }
-	} 
+        } 
       } else {
         complex_PRECISION odd_factor = odd_shift - even_shift;
          

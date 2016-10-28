@@ -708,7 +708,7 @@ void oddeven_setup_PRECISION( operator_double_struct *in, level_struct *l ) {
           for ( x=0; x<le[X]; x++ ) {
             if ( (t+z+y+x+oe_offset)%2 == 1 ) {
               // odd sites
-	      /* TODO: fix the vectorized part
+              /* TODO: fix the vectorized part
 #ifdef OPTIMIZED_SELF_COUPLING_PRECISION
               PRECISION tmp[144] __attribute__((aligned(64)));
               sse_set_clover_PRECISION( tmp, sc_in );
@@ -719,7 +719,7 @@ void oddeven_setup_PRECISION( operator_double_struct *in, level_struct *l ) {
               sse_site_clover_invert_PRECISION( tmp, Aoo_vectorized );
               Aoo_vectorized += 2*2*36;
 #endif
-	      */
+              */
 #ifndef HAVE_TM
               selfcoupling_cholesky_decomposition_PRECISION( Aoo, sc_in );
 #else
@@ -733,7 +733,7 @@ void oddeven_setup_PRECISION( operator_double_struct *in, level_struct *l ) {
               Aoo += lu_dec_size;
             } else {
               // even sites
-	      /*
+              /*
 #ifdef OPTIMIZED_SELF_COUPLING_PRECISION
               sse_set_clover_PRECISION( Aee_vectorized, sc_in );
 #ifdef HAVE_TM
@@ -741,7 +741,7 @@ void oddeven_setup_PRECISION( operator_double_struct *in, level_struct *l ) {
 #endif
               Aee_vectorized += 2*2*36;
 #endif
-	      */
+              */
 #ifndef HAVE_TM
               selfcoupling_cholesky_decomposition_PRECISION( Aee, sc_in );
 #else
@@ -801,7 +801,7 @@ void oddeven_setup_PRECISION( operator_double_struct *in, level_struct *l ) {
         for ( x=0; x<le[X]; x++ ) {
           if ( (t+z+y+x+oe_offset)%2 == 1 ) {
             // odd sites
-	    /*
+            /*
 #ifdef OPTIMIZED_SELF_COUPLING_PRECISION
             sse_set_clover_doublet_PRECISION( Aoo_vectorized, sc_in );
 #ifdef HAVE_TM
@@ -816,7 +816,7 @@ void oddeven_setup_PRECISION( operator_double_struct *in, level_struct *l ) {
             Aoo_vectorized += 288;
             Aoo_inverse_vectorized += 2*288;
 #endif
-	    */
+            */
             complex_double buffer[66];
             if ( g.csw ) {
               for(int i=0; i<12; i++) //0-23
@@ -842,7 +842,7 @@ void oddeven_setup_PRECISION( operator_double_struct *in, level_struct *l ) {
             Aoo += lu_doublet_dec_size;
           } else {
             // even sites
-	    /*
+            /*
 #ifdef OPTIMIZED_SELF_COUPLING_PRECISION
             sse_set_clover_doublet_PRECISION( Aee_vectorized, sc_in );
 #ifdef HAVE_TM
@@ -850,7 +850,7 @@ void oddeven_setup_PRECISION( operator_double_struct *in, level_struct *l ) {
 #endif
             Aee_vectorized += 288;
 #endif
-	    */
+            */
             complex_double buffer[66];
             if ( g.csw ) {
               for(int i=0; i<12; i++) //0-23

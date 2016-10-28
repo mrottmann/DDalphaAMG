@@ -29,6 +29,7 @@
   void coarse_operator_PRECISION_alloc( level_struct *l );
   void coarse_operator_PRECISION_free( level_struct *l );
   void coarse_operator_PRECISION_setup( vector_PRECISION *V, level_struct *l );
+  void coarse_operator_PRECISION_setup_finalize( level_struct *l, struct Thread *threading );
   void coarse_operator_PRECISION_set_couplings( operator_PRECISION_struct *op, level_struct *l, struct Thread *threading );
   void coarse_operator_PRECISION_set_couplings_clover( operator_PRECISION_struct *op, level_struct *l, struct Thread *threading );
   
@@ -145,7 +146,7 @@
 
   // eta += D*phi, D hermitian and stored columnwise packed
   static inline void mmvp_PRECISION( const vector_PRECISION eta, const complex_PRECISION *D,
-				     const vector_PRECISION phi, const register int n ) {
+                                     const vector_PRECISION phi, const register int n ) {
     register int i, j, k;
 
     eta[0] -= D[0]*phi[0];

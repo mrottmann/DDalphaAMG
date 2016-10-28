@@ -25,6 +25,7 @@
 
 #include "sse_coarse_operator.h"
 
+#ifdef INTERPOLATION_SETUP_LAYOUT_OPTIMIZED_PRECISION
 void coarse_operator_PRECISION_setup_vectorized( complex_PRECISION *operator, level_struct *l, struct Thread *threading ) {
   
   SYNC_HYPERTHREADS(threading)
@@ -215,7 +216,33 @@ void coarse_operator_PRECISION_setup_vectorized( complex_PRECISION *operator, le
     for ( mu=0; mu<4; mu++ )
       set_coarse_neighbor_coupling_PRECISION_vectorized_finalize( mu, l, a*aggregate_sites, n, tmp+mu*4*n*OPERATOR_COMPONENT_OFFSET_PRECISION );
 
+    // new aggregate is starting, zero out tmp
+    for(int i=0; i<4*4*n*OPERATOR_COMPONENT_OFFSET_PRECISION; i++)
+      tmp[i] = 0.0;
+
+    for ( int site=a*aggregate_sites; site<(a+1)*aggregate_sites; site++ ) {
+      if(l->depth == 0) {
+        for ( int c=0; c<l->num_eig_vect; c+=SIMD_LENGTH_PRECISION )
+          diagonal_aggregate_PRECISION_vectorized( eta1+c*fine_components, eta2+c*fine_components,
+                                                   operator+c*l->vector_size, &(l->s_PRECISION), l, site );
+      } else {
+        for ( int c=0; c<l->num_eig_vect; c+=SIMD_LENGTH_PRECISION )
+          coarse_aggregate_block_diagonal_PRECISION_vectorized( eta1+c*fine_components, eta2+c*fine_components,
+              operator+c*l->vector_size, &(l->s_PRECISION), l, site );
+      }
+      set_block_diagonal_PRECISION_vectorized( eta1, eta2, operator, l, site, n, tmp );
+    }
+
+    // aggregate is done, finalize
+    set_block_diagonal_PRECISION_vectorized_finalize( l, a*aggregate_sites, n, tmp );
+
   }
+
+  SYNC_HYPERTHREADS(threading)
+  SYNC_CORES(threading)
+
+  coarse_operator_PRECISION_setup_finalize( l, threading );
+
   START_MASTER(threading)
   FREE_HUGEPAGES( mpi_buffer, complex_PRECISION, OPERATOR_COMPONENT_OFFSET_PRECISION*(l->vector_size-l->inner_vector_size) );
 
@@ -226,6 +253,7 @@ void coarse_operator_PRECISION_setup_vectorized( complex_PRECISION *operator, le
   SYNC_HYPERTHREADS(threading)
   SYNC_CORES(threading)
 }
+#endif
 
 #ifdef VECTORIZE_COARSE_OPERATOR_PRECISION
 void coarse_operator_PRECISION_set_couplings( operator_PRECISION_struct *op, level_struct *l, struct Thread *threading ) {
@@ -743,7 +771,7 @@ void add_tm_term_to_vectorized_layout_PRECISION(config_PRECISION tm_term,
         int offset_to_column = (ip*ip+ip)/2; // upper triangle including diagonal
         out_tmp[(2*i+0)*column_offset + j] += sign*creal(tm_term[offset_to_column+jp]);
         out_tmp[(2*i+1)*column_offset + j] += cimag(tm_term[offset_to_column+jp]);
-	out_tmp[(2*(i+vecs)+0)*column_offset + j + vecs] += sign*creal(tm_term[offset_to_D + offset_to_column+jp]);
+        out_tmp[(2*(i+vecs)+0)*column_offset + j + vecs] += sign*creal(tm_term[offset_to_D + offset_to_column+jp]);
         out_tmp[(2*(i+vecs)+1)*column_offset + j + vecs] += cimag(tm_term[offset_to_D + offset_to_column+jp]);
       }
     }

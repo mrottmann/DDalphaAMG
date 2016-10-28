@@ -36,10 +36,10 @@ void compute_clover_term ( SU3_storage U, level_struct *l ) {
       for ( y=0; y<l->local_lattice[Y]; y++ )
         for ( x=0; x<l->local_lattice[X]; x++ ){
           if((t+z+y+x+op->oe_offset)%2) { //odd
-	    FOR12(op->odd_proj[i] = 1; i++;);
-	  } else {
+            FOR12(op->odd_proj[i] = 1; i++;);
+          } else {
             FOR12(op->odd_proj[i] = _COMPLEX_double_ZERO; i++;);
-	  }
+          }
         }
   
 #ifdef HAVE_TM
@@ -705,7 +705,7 @@ void tm_term_update( double mu, level_struct *l, struct Thread *threading ) {
     printf0("depth: %d, mu updated to %f \n", (l->depth), factor*(mu+even_shift));
   else  
     printf0("depth: %d, mu updated to %f on even sites and %f on odd sites \n", l->depth, factor*(mu+even_shift),
-	    factor*(mu+odd_shift));
+            factor*(mu+odd_shift));
   END_MASTER(threading)
 
   if ( g.interpolation && l->level > 0 && l->next_level != NULL )
@@ -741,7 +741,7 @@ void epsbar_term_update( level_struct *l, struct Thread *threading ) {
     printf0("depth: %d, epsbar term updated to %f + ig5 %f \n", l->depth, factor*epsbar, factor*even_shift);
   else  
     printf0("depth: %d, epsbar term updated to %f + ig5 %f on even sites and + ig5 %f on odd sites \n", l->depth,
-	    factor*epsbar, factor*even_shift, factor*odd_shift);
+            factor*epsbar, factor*even_shift, factor*odd_shift);
   END_MASTER(threading)
 
   if ( g.interpolation && l->level > 0 && l->next_level != NULL )

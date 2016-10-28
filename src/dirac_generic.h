@@ -41,9 +41,9 @@
   void operator_updates_PRECISION( level_struct *l, struct Thread *threading );
   void m0_update_PRECISION( PRECISION m0,operator_PRECISION_struct *op, level_struct *l, struct Thread *threading );
   void tm_term_PRECISION_setup( PRECISION mu, PRECISION even, PRECISION odd, operator_PRECISION_struct *op,
-			      level_struct *l, struct Thread *threading );
+                              level_struct *l, struct Thread *threading );
   void epsbar_term_PRECISION_setup( PRECISION epsbar, PRECISION even, PRECISION odd, operator_PRECISION_struct *op,
-				    level_struct *l, struct Thread *threading );
+                                    level_struct *l, struct Thread *threading );
   void two_flavours_test_PRECISION( operator_PRECISION_struct *op, level_struct *l, struct Thread *threading );
 
   void gamma5_PRECISION( vector_PRECISION eta, vector_PRECISION phi, level_struct *l, struct Thread *threading );

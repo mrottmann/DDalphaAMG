@@ -1284,7 +1284,7 @@ void parameter_update( level_struct *l ) {
   else
     l->num_parent_eig_vect = 6;
   
-  if ( l->level > 0 ) 
+  if ( l->level > 0 && l->next_level != NULL ) 
     parameter_update( l->next_level );
 }
 

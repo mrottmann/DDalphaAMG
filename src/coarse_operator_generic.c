@@ -27,9 +27,7 @@ void coarse_operator_PRECISION_alloc( level_struct *l ) {
       k = l->next_level->num_parent_eig_vect*2;  
   l->next_level->D_size = k*k*4*nd;
   l->next_level->clover_size = ((k*(k+1))/2)*nd;
-#ifdef HAVE_TM
   l->next_level->block_size = ((k/2*(k/2+1)))*nd;
-#endif
   
   operator_PRECISION_alloc( &(l->next_level->op_PRECISION), _ORDINARY, l->next_level );
 }
@@ -61,11 +59,11 @@ void coarse_operator_PRECISION_setup( vector_PRECISION *V, level_struct *l ) {
   vector_PRECISION buffer1 = l->vbuf_PRECISION[4], buffer2 = l->vbuf_PRECISION[5];
   
   int mu, n = l->num_eig_vect, i, j,
-      D_size = l->next_level->D_size,
-      clover_size = l->next_level->clover_size;
+    D_size = l->next_level->D_size,
+    clover_size = l->next_level->clover_size,
+    block_size = l->next_level->block_size;
   void (*aggregate_self_coupling)() = (l->depth==0)?d_plus_clover_aggregate_PRECISION:coarse_aggregate_self_couplings_PRECISION,
        (*aggregate_neighbor_coupling)() = (l->depth==0)?d_neighbor_aggregate_PRECISION:coarse_aggregate_neighbor_couplings_PRECISION;
-  int block_size = l->next_level->block_size;
   void (*aggregate_block)() = (l->depth==0)?diagonal_aggregate_PRECISION:coarse_aggregate_block_diagonal_PRECISION;
    
   operator_PRECISION_define( &(l->next_level->op_PRECISION), l->next_level );
@@ -99,7 +97,18 @@ void coarse_operator_PRECISION_setup( vector_PRECISION *V, level_struct *l ) {
       set_coarse_neighbor_coupling_PRECISION( buffer1, buffer2, V, mu, i, l );
     }
   }
+  
+  coarse_operator_PRECISION_setup_finalize( l, no_threading );
 
+  t1 = MPI_Wtime();
+  if ( g.print > 0 ) printf0("depth: %d, time spent for setting up next coarser operator: %lf seconds\n", l->depth, t1-t0 );
+
+}
+
+void coarse_operator_PRECISION_setup_finalize( level_struct *l, struct Thread *threading ) {
+
+  int block_size = l->next_level->block_size;
+  
   l->next_level->op_PRECISION.m0 = l->s_PRECISION.op.m0;
 #ifdef HAVE_TM    
   //tm_term
@@ -109,8 +118,8 @@ void coarse_operator_PRECISION_setup( vector_PRECISION *V, level_struct *l ) {
     vector_PRECISION_define( l->next_level->op_PRECISION.tm_term, _COMPLEX_double_ZERO, 0, block_size, l->next_level );
   else
     tm_term_PRECISION_setup( mf*l->s_PRECISION.op.mu, mf*l->s_PRECISION.op.mu_even_shift,
-			     mf*l->s_PRECISION.op.mu_odd_shift, &(l->next_level->op_PRECISION),
-			     l->next_level, no_threading ); 
+                             mf*l->s_PRECISION.op.mu_odd_shift, &(l->next_level->op_PRECISION),
+                             l->next_level, threading ); 
 #endif
 #ifdef HAVE_TM1p1
   //eps_term
@@ -120,12 +129,9 @@ void coarse_operator_PRECISION_setup( vector_PRECISION *V, level_struct *l ) {
     vector_PRECISION_define( l->next_level->op_PRECISION.epsbar_term, _COMPLEX_double_ZERO, 0, block_size, l->next_level );
   else
     epsbar_term_PRECISION_setup( ef*l->s_PRECISION.op.epsbar, ef*l->s_PRECISION.op.epsbar_ig5_even_shift,
-				 ef*l->s_PRECISION.op.epsbar_ig5_odd_shift, &(l->next_level->op_PRECISION),
-				 l->next_level, no_threading );
+                                 ef*l->s_PRECISION.op.epsbar_ig5_odd_shift, &(l->next_level->op_PRECISION),
+                                 l->next_level, threading );
 #endif
-  
-  t1 = MPI_Wtime();
-  if ( g.print > 0 ) printf0("depth: %d, time spent for setting up next coarser operator: %lf seconds\n", l->depth, t1-t0 );
 
 }
 
@@ -855,7 +861,7 @@ void coarse_operator_PRECISION_test_routine( level_struct *l, struct Thread *thr
 #ifdef HAVE_TM1p1
     START_LOCKED_MASTER(threading)
     if ( g.n_flavours == 2 &&
-	 ( g.epsbar != 0 || g.epsbar_ig5_odd_shift != 0 || g.epsbar_ig5_odd_shift != 0 ) ) {
+         ( g.epsbar != 0 || g.epsbar_ig5_odd_shift != 0 || g.epsbar_ig5_odd_shift != 0 ) ) {
       vector_PRECISION_define( vp2, 0, 0, ivs, l );
       if (l->depth==0) 
         apply_doublet_coupling_PRECISION( vp2, vp1, l->s_PRECISION.op.epsbar_term, ivs );

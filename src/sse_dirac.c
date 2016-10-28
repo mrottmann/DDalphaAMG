@@ -2490,7 +2490,7 @@ void sse_set_clover_float( float *out, complex_float *in ) {
     for ( int j=0; j<6; j++ ) {
       for ( int i=0; i<SIMD_LENGTH_float; i++ ) {
         if ( i+k == j || i+k-6 == j ) {
-	  // diagonal entry i+k,i+k
+          // diagonal entry i+k,i+k
           index = i+k;
           sign = 1.0;
         } else if ( i+k<6 ) {
@@ -2535,7 +2535,7 @@ void sse_set_clover_doublet_float( float *out, complex_float *in ) {
     for ( int j=0; j<6; j++ ) {
       for ( int i=0; i<SIMD_LENGTH_float; i++ ) {
         if ( i+k == j || i+k-6 == j ) {
-	  // diagonal entry i+k,i+k
+          // diagonal entry i+k,i+k
           index = i+k;
           sign = 1.0;
         } else if ( i+k<6 ) {
