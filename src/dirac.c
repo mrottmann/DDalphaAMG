@@ -715,7 +715,6 @@ void tm_term_update( double mu, level_struct *l, struct Thread *threading ) {
 #endif
 }
 
-
 void epsbar_term_update( level_struct *l, struct Thread *threading ) {
 
 #ifdef HAVE_TM1p1

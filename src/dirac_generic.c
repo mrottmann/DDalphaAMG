@@ -1277,7 +1277,7 @@ void tm_term_PRECISION_setup( PRECISION mu, PRECISION even, PRECISION odd, opera
     return;
 
   config_PRECISION tm_term = op->tm_term;
-  if ( tm_term != NULL && ( op->mu != mu || op->mu_even_shift != even || op->mu_odd_shift != odd )) {
+  if ( tm_term != NULL ) {
     config_PRECISION odd_proj = op->odd_proj;
     complex_PRECISION shift = I*mu;
     complex_PRECISION even_shift = I*even;
@@ -1340,7 +1340,7 @@ void tm_term_PRECISION_setup( PRECISION mu, PRECISION even, PRECISION odd, opera
         for ( i=0; i<n; i++ ) {
           for ( j=0; j<m; j++ ) {
             for ( k=0; k<j; k++ ) 
-              tm_term[k] = -1.* odd_factor*odd_proj[k] ;
+              tm_term[k] = -1. * odd_factor * odd_proj[k] ;
             tm_term += j;
             odd_proj += j;
             *tm_term = -1.* ( shift + even_shift + odd_factor * (*odd_proj));
@@ -1350,7 +1350,7 @@ void tm_term_PRECISION_setup( PRECISION mu, PRECISION even, PRECISION odd, opera
           
           for ( j=0; j<m; j++ ) {
             for ( k=0; k<j; k++ ) 
-              tm_term[k] = odd_factor*odd_proj[k] ;
+              tm_term[k] = odd_factor * odd_proj[k] ;
             tm_term += j;
             odd_proj += j;
             *tm_term = ( shift + even_shift + odd_factor * (*odd_proj));
@@ -1372,7 +1372,7 @@ void epsbar_term_PRECISION_setup( PRECISION epsbar, PRECISION even, PRECISION od
     return;
 
   config_PRECISION eps_term = op->epsbar_term;
-  if ( eps_term != NULL && ( op->epsbar != epsbar || op->epsbar_ig5_even_shift != even || op->epsbar_ig5_odd_shift != odd )) {
+  if ( eps_term != NULL ) {
     config_PRECISION odd_proj = op->odd_proj;
     complex_PRECISION shift = -epsbar;
     complex_PRECISION even_shift = I*even;

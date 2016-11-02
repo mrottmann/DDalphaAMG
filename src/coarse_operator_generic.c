@@ -113,6 +113,7 @@ void coarse_operator_PRECISION_setup_finalize( level_struct *l, struct Thread *t
 #ifdef HAVE_TM    
   //tm_term
   PRECISION mf = (g.mu_factor[l->depth]) ? g.mu_factor[l->next_level->depth]/g.mu_factor[l->depth]:0;
+  printf0("%le  %le  %le  %le\n", mf, l->s_PRECISION.op.mu, l->s_PRECISION.op.mu_even_shift, l->s_PRECISION.op.mu_odd_shift);
   if ( mf*l->s_PRECISION.op.mu + mf*l->s_PRECISION.op.mu_even_shift == 0 &&
        mf*l->s_PRECISION.op.mu + mf*l->s_PRECISION.op.mu_odd_shift == 0 )
     vector_PRECISION_define( l->next_level->op_PRECISION.tm_term, _COMPLEX_double_ZERO, 0, block_size, l->next_level );

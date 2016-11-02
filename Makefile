@@ -1,5 +1,5 @@
 # --- COMPILER ----------------------------------------
-CC = mpiicc 
+CC = mpicc 
 
 # --- CFLAGS -----------------------------------------
 CFLAGS_gnu = -std=gnu99 -Wall -pedantic -O3 -ffast-math -msse4.2 #-fopenmp 
