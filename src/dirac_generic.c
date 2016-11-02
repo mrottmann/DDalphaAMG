@@ -881,6 +881,39 @@ void tau1_gamma5_set_odd_to_zero_PRECISION( vector_PRECISION eta, vector_PRECISI
     }
 }
 
+void scale_even_odd_PRECISION( vector_PRECISION eta, vector_PRECISION phi, complex_double even, complex_double odd, 
+                               level_struct *l, struct Thread *threading ) {
+   
+  int i = threading->start_site[l->depth];
+  vector_PRECISION eta_end = eta + threading->end_index[l->depth];
+  eta += threading->start_index[l->depth];
+  phi += threading->start_index[l->depth];
+
+#ifdef HAVE_TM1p1
+  if ( g.n_flavours == 2 )
+    while ( eta < eta_end ) {
+      if(g.odd_even_table[i]==_EVEN){
+        FOR24( *eta = even*(*phi); phi++; eta++; );
+      }
+      else if(g.odd_even_table[i]==_ODD){
+        FOR24( *eta = odd*(*phi); phi++; eta++; );
+      }
+      i++;
+    }
+  else
+#endif
+    while ( eta < eta_end ) {
+      if(g.odd_even_table[i]==_EVEN) {
+        FOR12( *eta = even*(*phi); phi++; eta++; );
+      }
+      else if(g.odd_even_table[i]==_ODD) {
+        FOR12( *eta = odd*(*phi); phi++; eta++; );
+      }
+      i++;
+    }
+}
+
+
 void two_flavours_to_serial_PRECISION( vector_PRECISION flav1, vector_PRECISION flav2, vector_PRECISION serial, level_struct *l, struct Thread *threading ) {
 
 #ifdef HAVE_TM1p1

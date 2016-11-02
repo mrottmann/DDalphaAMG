@@ -77,8 +77,10 @@
     if(threading->thread == 0) \
         CORE_BARRIER(threading);
 
+#define MASTER(threading) \
+    if(threading->core + threading->thread == 0)
 #define START_MASTER(threading) \
-    if(threading->core + threading->thread == 0) {
+  MASTER(threading) {
 #define END_MASTER(threading) \
     }
 

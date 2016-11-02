@@ -604,7 +604,6 @@ void DDalphaAMG_update_setup( int iterations, DDalphaAMG_status * mg_status ) {
   }
 }
 
-
 enum {_SOLVE, _SOLVE_SQ, _SOLVE_SQ_ODD, _SOLVE_SQ_EVEN, _PRECOND, _OPERATOR};
 static inline void DDalphaAMG_driver( double *vector1_out, double *vector1_in, double *vector2_out, double *vector2_in, double tol, DDalphaAMG_status *mg_status, int _TYPE ) {
   
@@ -978,6 +977,503 @@ static inline void DDalphaAMG_driver( double *vector1_out, double *vector1_in, d
   
 }
 
+static inline void vector_copy( vector_double vector_out, vector_double vector_in )
+{
+  THREADED(threading[0]->n_core) {
+    int start = threading[omp_get_thread_num()]->start_index[0], 
+      end = threading[omp_get_thread_num()]->end_index[0];
+    vector_double_copy( vector_out, vector_in, start, end, &l );
+  }  
+}
+
+static inline void solver( )
+{
+  THREADED(threading[0]->n_core)
+    if ( g.method == -1 ) {
+      cgn_double( &(g.p), &l, threading[omp_get_thread_num()] );
+    } else if ( g.mixed_precision == 2 ) {
+      fgmres_MP( &(g.p_MP), &l, threading[omp_get_thread_num()] );
+    } else {
+      fgmres_double( &(g.p), &l, threading[omp_get_thread_num()] );
+    }
+}
+
+static inline void correct_guess( vector_double guess, vector_double solution, vector_double solution2,
+                                  double  even_dshift, double odd_dshift )
+{
+  // guess = D^{-1}*rhs - i*dshift*D^{-2}*rhs 
+  THREADED(threading[0]->n_core) {
+    int start = threading[omp_get_thread_num()]->start_index[0], 
+      end = threading[omp_get_thread_num()]->end_index[0];
+    if( odd_dshift == 0 || even_dshift == 0 || even_dshift == odd_dshift ) {
+      double dshift = ( odd_dshift == 0 ) ? even_dshift:odd_dshift;
+      printf0("correcting with dshift %le\n", dshift);
+      vector_double_scale( guess, solution2, -I*dshift, g.p.v_start, g.p.v_end, &l );
+      vector_double_plus( guess, guess, solution, start, end, &l );
+    } else
+      vector_double_copy( guess, solution, start, end, &l );
+  }  
+}
+
+
+static inline void DDalphaAMG_ms_driver( double **vector1_out, double *vector1_in, 
+                                         double **vector2_out, double *vector2_in, 
+                                         double  *even_shifts, double *odd_shifts, int n_shifts,
+                                         double tol, DDalphaAMG_status *mg_status, int _TYPE ) 
+{
+  int t, z, y, x, i, j, k, n, mu, *ll = l.local_lattice, *gl=l.global_lattice, sl[4], precision_changed;
+  complex_double twisted_bc, tmp1, tmp2;
+  double phase[4] = {_COMPLEX_double_ZERO, _COMPLEX_double_ZERO, _COMPLEX_double_ZERO, _COMPLEX_double_ZERO},
+      vmin=1, vmax=EPS_float, vtmp;
+  gmres_double_struct *p = g.mixed_precision==2?&(g.p_MP.dp):&(g.p);
+  vector_double vb, rhs = p->b;
+  vector_double vx, sol = p->x;
+  vector_double source = NULL, solution = NULL, solution2 = NULL;
+  DDalphaAMG_status tmp_status;
+
+  double t0, t1;
+  t0 = MPI_Wtime();
+  g.coarse_time = 0;
+  g.iter_count = 0;
+  g.coarse_iter_count = 0;
+  mg_status->success = 0;
+  mg_status->info = 0;
+  
+  ASSERT(vector1_out!=NULL);
+  ASSERT(vector1_in!=NULL);
+#ifdef HAVE_TM1p1
+  if(g.n_flavours==2) {
+    ASSERT(vector2_out!=NULL);
+    ASSERT(vector2_in!=NULL);
+  }
+#endif
+
+  if(g.mixed_precision!=2)
+    g.p.tol = tol;
+  else
+    g.p_MP.dp.tol = tol;
+
+  for (i=0; i<4; i++)
+    sl[i] = ll[i]*g.my_coords[i];
+ 
+  for (t=0, j=0; t<ll[T]; t++) {
+    if (g.bc==_TWISTED) phase[T] = g.twisted_bc[T]*((double)sl[T]+t)/(double)gl[T];
+    for (z=0; z<ll[Z]; z++) {
+      if (g.bc==_TWISTED) phase[Z] = phase[T] + g.twisted_bc[Z]*((double)sl[Z]+z)/(double)gl[Z];
+      for (y=0; y<ll[Y]; y++) {
+        if (g.bc==_TWISTED) phase[Y] = phase[Z] + g.twisted_bc[Y]*((double)sl[Y]+y)/(double)gl[Y];
+        for (x=0; x<ll[X]; x++) {
+          if (g.bc==_TWISTED) {
+            phase[X] = phase[Y] + g.twisted_bc[X]*((double)sl[X]+x)/(double)gl[X];
+            twisted_bc = cexp(I*phase[X]);
+          } else
+            twisted_bc = 1.;
+          if(vector_index_fct!=NULL )
+            i = vector_index_fct( t, z, y, x );
+          else 
+            i = 2*j;
+          
+#ifdef HAVE_TM1p1
+          if(g.n_flavours==2) {
+            for ( mu=0; mu<4; mu++ ) {
+              for ( k=0; k<3; k++, j++ ) {
+#ifndef BASIS4 
+                rhs[j] = ((complex_double)vector1_in[i+2*(k+3*mu)] + I*(complex_double)vector1_in[i+2*(k+3*mu)+1]) * twisted_bc;
+                rhs[j+6] = ((complex_double)vector2_in[i+2*(k+3*mu)] + I*(complex_double)vector2_in[i+2*(k+3*mu)+1]) * twisted_bc;
+
+#else
+                rhs[j] = ((complex_double)vector1_in[i+2*(k+3*(3-mu))] + I*(complex_double)vector1_in[i+2*(k+3*(3-mu))+1]) * twisted_bc;
+                rhs[j+6] = ((complex_double)vector2_in[i+2*(k+3*(3-mu))] + I*(complex_double)vector2_in[i+2*(k+3*(3-mu))+1]) * twisted_bc;
+#endif
+                
+#ifndef INIT_ONE_PREC
+                if(g.mixed_precision==2) {
+                  vtmp=cabs(rhs[j]);
+                  if(vtmp > vmax)
+                    vmax=vtmp;
+                  if( vtmp > EPS_double && vtmp < vmin )
+                    vmin=vtmp;
+                  vtmp=cabs(rhs[j+6]);
+                  if(vtmp > vmax)
+                    vmax=vtmp;
+                  if( vtmp > EPS_double && vtmp < vmin )
+                    vmin=vtmp;
+                }
+              }
+#endif
+              if(mu%2)
+                j+=6;
+            }
+          } else
+#endif
+            for ( mu=0; mu<4; mu++ )
+              for ( k=0; k<3; k++, j++ ) {
+#ifndef BASIS4 
+                rhs[j] = ((complex_double)vector1_in[i+2*(k+3*mu)] + I*(complex_double)vector1_in[i+2*(k+3*mu)+1]) * twisted_bc;
+#else
+                rhs[j] = ((complex_double)vector1_in[i+2*(k+3*(3-mu))] + I*(complex_double)vector1_in[i+2*(k+3*(3-mu))+1]) * twisted_bc;
+#endif
+                
+#ifndef INIT_ONE_PREC
+                if( g.mixed_precision == 2 ) {
+                  vtmp = cabs(rhs[j]);
+                  if(vtmp > vmax)
+                    vmax = vtmp;
+                  if( vtmp > EPS_double && vtmp < vmin )
+                    vmin = vtmp;
+                }
+              }
+#endif
+        }
+      }
+    }
+  }
+   
+#ifndef INIT_ONE_PREC
+    
+  double gvmin, gvmax;
+  if( g.mixed_precision == 2 ) {
+    MPI_Allreduce(&vmin, &gvmin, 1, MPI_DOUBLE, MPI_MIN, g.comm_cart);
+    MPI_Allreduce(&vmax, &gvmax, 1, MPI_DOUBLE, MPI_MAX, g.comm_cart);
+  }
+  
+  //switching to double precision on the fine level
+  if(g.mixed_precision==2 && gvmin/gvmax<EPS_float) {
+    warning0("Changing solver precision on fine level due to rhs elements (min/max=%e)\n", vmin/vmax);
+    precision_changed=1;
+    g.mixed_precision=1;
+    p = &(g.p);
+    // storing pointer in x and b
+    vb = p->b; 
+    vx = p->x;
+    p->b = g.p_MP.dp.b;
+    p->x = g.p_MP.dp.x;
+    p->tol = g.p_MP.dp.tol;
+  } else precision_changed = 0;
+#endif
+
+  if ( n_shifts > 0 ) {
+    ASSERT( even_shifts != NULL );
+    ASSERT( odd_shifts != NULL );
+  }
+  if ( n_shifts > 1 ) {
+    MALLOC( source, complex_double, l.inner_vector_size );
+    MALLOC( solution, complex_double, l.inner_vector_size );
+    if( _TYPE == _SOLVE_SQ || _TYPE == _SOLVE_SQ_ODD || _TYPE == _SOLVE_SQ_EVEN )
+      MALLOC( solution2, complex_double, l.inner_vector_size );
+  }
+  
+  for ( n = 0; n < n_shifts || n_shifts == 0; n++ ) {
+    
+    if ( n_shifts ) {
+#ifdef HAVE_TM1p1
+      if(g.n_flavours==2) {
+        if( g.epsbar_ig5_even_shift != even_shifts[n] || g.epsbar_ig5_odd_shift != odd_shifts[n] ) {
+          g.epsbar_ig5_even_shift = even_shifts[n];
+          g.epsbar_ig5_odd_shift  =  odd_shifts[n];
+          THREADED(threading[0]->n_core)
+            epsbar_term_update( &l, threading[omp_get_thread_num()] );
+          THREADED(threading[0]->n_core)
+            finalize_operator_update( &l, threading[omp_get_thread_num()]);
+        }        
+      } else
+#endif
+        {
+          if( g.mu_even_shift != even_shifts[n] || g.mu_odd_shift != odd_shifts[n] ) {
+            g.mu_even_shift = even_shifts[n];
+            g.mu_odd_shift  =  odd_shifts[n];
+            THREADED(threading[0]->n_core)
+              tm_term_update( g.mu, &l, threading[omp_get_thread_num()] );
+            THREADED(threading[0]->n_core)
+              finalize_operator_update( &l, threading[omp_get_thread_num()]);
+          }
+        }
+    }
+
+    switch(_TYPE) {
+      
+    case _SOLVE :
+      if ( n ) {
+        vector_copy( rhs, source );
+        p->initial_guess_zero = 0;
+      } else if ( n_shifts > 1 )
+        vector_copy( source, rhs );
+      
+      solver( );
+      break;
+
+      
+    case _SOLVE_SQ :
+      if ( n ) {
+        vector_copy( rhs, source );
+        p->initial_guess_zero = 0;
+      } else if ( n_shifts > 1 ) {
+        THREADED(threading[0]->n_core) 
+#ifdef HAVE_TM1p1
+          if(g.n_flavours==2) 
+            // sol = (D_h^{-1})*g5*tau1*(D_h^{-1})*g5*tau1*rhs
+            tau1_gamma5_double( rhs, rhs, &l, threading[omp_get_thread_num()] );
+          else
+#endif
+            // sol = (D_d^{-1})*g5*(D_u^{-1})*g5*rhs
+            gamma5_double( rhs, rhs, &l, threading[omp_get_thread_num()] );
+        vector_copy( source, rhs );
+      }
+
+      if( n )
+        correct_guess( sol, solution, solution2, even_shifts[n]-even_shifts[n-1], odd_shifts[n]-odd_shifts[n-1]);
+      solver( );
+      if ( n < n_shifts-1 ) 
+        vector_copy( solution, sol );
+        
+      THREADED(threading[0]->n_core) 
+#ifdef HAVE_TM1p1
+        if(g.n_flavours==2) 
+          tau1_gamma5_double(rhs, sol, &l, threading[omp_get_thread_num()] );
+        else
+#endif
+          gamma5_double(rhs, sol, &l, threading[omp_get_thread_num()] );
+
+#ifdef HAVE_TM1p1
+      if(g.n_flavours==2) 
+        DDalphaAMG_change_epsbar_shift_sign( &tmp_status );
+      else
+#endif
+        DDalphaAMG_change_mu_sign( &tmp_status );
+
+      if( n )
+        vector_copy( sol, solution2 );
+      solver( );
+      if ( n < n_shifts-1 ) 
+        vector_copy( solution2, sol );
+     
+      // DDalphaAMG_change_mu_sign( &tmp_status );
+      warning0("sign of mu changed during the inversion of squared operator\n");
+      break;
+      
+
+    case _SOLVE_SQ_ODD :    
+      if ( n ) {
+        vector_copy( rhs, source );
+        p->initial_guess_zero = 0;
+      } else if ( n_shifts > 1 ) {
+        THREADED(threading[0]->n_core)
+#ifdef HAVE_TM1p1
+          if(g.n_flavours==2) 
+            // sol = (D_h^{-1})*g5*tau1*(D_h^{-1})*g5*tau1*rhs
+            tau1_gamma5_set_even_to_zero_double(rhs, rhs, &l, threading[omp_get_thread_num()]);
+          else
+#endif
+            // sol = (D_d^{-1})*g5*(D_u^{-1})*g5*rhs
+            gamma5_set_even_to_zero_double(rhs, rhs, &l, threading[omp_get_thread_num()]);
+       
+        vector_copy( source, rhs );
+      }
+
+      if( n )
+        correct_guess( sol, solution, solution2, even_shifts[n]-even_shifts[n-1], odd_shifts[n]-odd_shifts[n-1]);
+      solver( );
+      if ( n < n_shifts-1 ) 
+        vector_copy( solution, sol );
+
+      THREADED(threading[0]->n_core)
+#ifdef HAVE_TM1p1
+          if(g.n_flavours==2) 
+            tau1_gamma5_set_even_to_zero_double(rhs, sol, &l, threading[omp_get_thread_num()]);
+          else
+#endif
+            gamma5_set_even_to_zero_double(rhs, sol, &l, threading[omp_get_thread_num()]);
+
+#ifdef HAVE_TM1p1
+      if(g.n_flavours==2) 
+        DDalphaAMG_change_epsbar_shift_sign( &tmp_status );
+      else
+#endif
+        DDalphaAMG_change_mu_sign( &tmp_status );
+
+      if( n )
+        vector_copy( sol, solution2 );
+
+      solver( );
+      if ( n < n_shifts-1 ) 
+        vector_copy( solution2, sol );
+
+      // DDalphaAMG_change_mu_sign( &tmp_status );
+      warning0("sign of mu changed during the inversion of squared operator\n");
+      break;
+      
+
+    case _SOLVE_SQ_EVEN :    
+      if ( n ) {
+        vector_copy( rhs, source );
+        p->initial_guess_zero = 0;
+      } else if ( n_shifts > 1 ) {
+        THREADED(threading[0]->n_core)
+#ifdef HAVE_TM1p1
+          if(g.n_flavours==2) 
+            // sol = (D_h^{-1})*g5*tau1*(D_h^{-1})*g5*tau1*rhs
+            tau1_gamma5_set_odd_to_zero_double(rhs, rhs, &l, threading[omp_get_thread_num()]);
+          else
+#endif
+            // sol = (D_d^{-1})*g5*(D_u^{-1})*g5*rhs
+            gamma5_set_odd_to_zero_double(rhs, rhs, &l, threading[omp_get_thread_num()]);
+
+        vector_copy( source, rhs );
+      }
+
+      if( n )
+        correct_guess( sol, solution, solution2, even_shifts[n]-even_shifts[n-1], odd_shifts[n]-odd_shifts[n-1]);
+      solver( );
+      if ( n < n_shifts-1 ) 
+        vector_copy( solution, sol );
+
+      THREADED(threading[0]->n_core)
+#ifdef HAVE_TM1p1
+        if(g.n_flavours==2) 
+          tau1_gamma5_set_odd_to_zero_double(rhs, sol, &l, threading[omp_get_thread_num()]);
+        else
+#endif
+          gamma5_set_odd_to_zero_double(rhs, sol, &l, threading[omp_get_thread_num()]);
+       
+#ifdef HAVE_TM1p1
+      if(g.n_flavours==2) 
+        DDalphaAMG_change_epsbar_shift_sign( &tmp_status );
+      else
+#endif
+        DDalphaAMG_change_mu_sign( &tmp_status );
+      
+      if( n )
+        vector_copy( sol, solution2 );
+      solver( );
+      if ( n < n_shifts-1 ) 
+        vector_copy( solution2, sol );
+
+      // DDalphaAMG_change_mu_sign( &tmp_status );
+      warning0("sign of mu changed during the inversion of squared operator\n");
+      break;
+      
+
+    case _PRECOND :
+      THREADED(threading[0]->n_core)
+        preconditioner( sol, NULL, rhs, _NO_RES, &l, threading[omp_get_thread_num()] );
+      break;
+
+      
+    case _OPERATOR :
+      THREADED(threading[0]->n_core)
+        if ( g.mixed_precision == 2 ) {
+          apply_operator_double( sol, rhs, &(g.p_MP.dp), &l, threading[omp_get_thread_num()] );
+        } else {
+          apply_operator_double( sol, rhs, &(g.p), &l, threading[omp_get_thread_num()] );
+        }
+      break;
+
+      
+    default :
+      warning0("_TYPE not found in DDalphaAMG_driver. Returing vector in as vector out.");
+      sol=rhs;
+      break;
+    }
+    
+    for (t=0, j=0; t<ll[T]; t++) {
+      if (g.bc==_TWISTED) phase[T] = g.twisted_bc[T]*((double)sl[T]+t)/(double)gl[T];
+      for (z=0; z<ll[Z]; z++) {
+        if (g.bc==_TWISTED) phase[Z] = phase[T] + g.twisted_bc[Z]*((double)sl[Z]+z)/(double)gl[Z];
+        for (y=0; y<ll[Y]; y++) {
+          if (g.bc==_TWISTED) phase[Y] = phase[Z] + g.twisted_bc[Y]*((double)sl[Y]+y)/(double)gl[Y];
+          for (x=0; x<ll[X]; x++) {
+            if (g.bc==_TWISTED) {
+              phase[X] = phase[Y] + g.twisted_bc[X]*((double)sl[X]+x)/(double)gl[X];
+              twisted_bc = cexp(-I*phase[X]);
+            } else
+              twisted_bc = 1.;
+            if(vector_index_fct!=NULL )
+              i = vector_index_fct( t, z, y, x );
+            else 
+              i = 2*j;
+            
+#ifdef HAVE_TM1p1
+            if(g.n_flavours==2) {
+              for ( mu=0; mu<4; mu++ ) {
+                for ( k=0; k<3; k++, j++ ) {
+                  tmp1 = sol[j] * twisted_bc;
+                  tmp2 = sol[j+6] * twisted_bc;
+#ifndef BASIS4 
+                  vector1_out[n][i+2*(k+3*mu)]   = creal(tmp1);
+                  vector1_out[n][i+2*(k+3*mu)+1] = cimag(tmp1);
+                  vector2_out[n][i+2*(k+3*mu)]   = creal(tmp2);
+                  vector2_out[n][i+2*(k+3*mu)+1] = cimag(tmp2);
+#else
+                  vector1_out[n][i+2*(k+3*(3-mu))]   = creal(tmp1);
+                  vector1_out[n][i+2*(k+3*(3-mu))+1] = cimag(tmp1);
+                  vector2_out[n][i+2*(k+3*(3-mu))]   = creal(tmp2);
+                  vector2_out[n][i+2*(k+3*(3-mu))+1] = cimag(tmp2);
+#endif   
+                }
+                if(mu%2)
+                  j+=6;
+              }
+            } else
+#endif
+              for ( mu=0; mu<4; mu++ )
+                for ( k=0; k<3; k++, j++ ) {
+                  tmp1 = sol[j] * twisted_bc;
+#ifndef BASIS4 
+                  vector1_out[n][i+2*(k+3*mu)]   = creal(tmp1);
+                  vector1_out[n][i+2*(k+3*mu)+1] = cimag(tmp1);
+#else
+                  vector1_out[n][i+2*(k+3*(3-mu))]   = creal(tmp1);
+                  vector1_out[n][i+2*(k+3*(3-mu))+1] = cimag(tmp1);
+#endif   
+                }
+          }
+        }
+      }
+    }
+    
+  }
+
+  if ( n_shifts > 0 ) {
+    FREE( source, complex_double, l.inner_vector_size );
+    FREE( solution, complex_double, l.inner_vector_size );
+    if( _TYPE == _SOLVE_SQ || _TYPE == _SOLVE_SQ_ODD || _TYPE == _SOLVE_SQ_EVEN )
+      FREE( solution2, complex_double, l.inner_vector_size );
+    p->initial_guess_zero = 1;
+  }
+
+  
+#ifndef INIT_ONE_PREC
+  if (precision_changed) {
+    g.mixed_precision=2;
+    // recovering pointer from x and b
+    p->b = vb; 
+    p->x = vx;
+  }
+#endif
+    
+  if ( g.norm_res <= tol || _TYPE == _OPERATOR || _TYPE == _PRECOND )
+    mg_status->success = 1;
+  mg_status->info = g.norm_res;
+  t1 = MPI_Wtime();
+  mg_status->time = t1-t0;
+  mg_status->coarse_time = g.coarse_time;
+  mg_status->iter_count = g.iter_count;
+  mg_status->coarse_iter_count = g.coarse_iter_count;
+  
+}
+
+static inline void set_n_flavours( int n) {
+
+#ifdef HAVE_TM1p1
+  THREADED(threading[0]->n_core)
+    data_layout_n_flavours( n, &l, threading[omp_get_thread_num()] );
+#else
+  if( n==2 )
+      error0("For DDalphaAMG_solve_doublet_*, HAVE_TM1p1 flag required\n");
+#endif
+    
+}
+
 void DDalphaAMG_solve( double *vector_out, double *vector_in, double tol, DDalphaAMG_status *mg_status )
 {
   DDalphaAMG_driver( vector_out, vector_in, NULL, NULL, tol, mg_status, _SOLVE );
@@ -987,19 +1483,20 @@ void DDalphaAMG_solve_doublet( double *vector1_out, double *vector1_in,
                                double *vector2_out, double *vector2_in,
                                double tol, DDalphaAMG_status *mg_status )
 {
-#ifdef HAVE_TM1p1
-  THREADED(threading[0]->n_core)
-    data_layout_n_flavours( 2, &l, threading[omp_get_thread_num()] );
-#else
-  error0("For DDalphaAMG_solve_doublet_*, HAVE_TM1p1 flag required\n");
-#endif
-
+  set_n_flavours( 2 );
   DDalphaAMG_driver( vector1_out, vector1_in, vector2_out, vector2_in, tol, mg_status, _SOLVE );
+  set_n_flavours( 1 );
+}
 
-#ifdef HAVE_TM1p1
-  THREADED(threading[0]->n_core)
-    data_layout_n_flavours( 1, &l, threading[omp_get_thread_num()] );
-#endif
+void DDalphaAMG_solve_ms_doublet( double **vector1_out, double *vector1_in,
+                                  double **vector2_out, double *vector2_in,
+                                  double  *even_shifts, double *odd_shifts, int n_shifts,
+                                  double tol, DDalphaAMG_status *mg_status )
+{
+  set_n_flavours( 2 );
+  DDalphaAMG_ms_driver( vector1_out, vector1_in, vector2_out, vector2_in, even_shifts, odd_shifts, n_shifts,
+                        tol, mg_status, _SOLVE );
+  set_n_flavours( 1 );
 }
 
 void DDalphaAMG_solve_squared( double *vector_out, double *vector_in, double tol, DDalphaAMG_status *mg_status )
@@ -1011,19 +1508,20 @@ void DDalphaAMG_solve_doublet_squared( double *vector1_out, double *vector1_in,
                                        double *vector2_out, double *vector2_in,
                                        double tol, DDalphaAMG_status *mg_status )
 {
-#ifdef HAVE_TM1p1
-  THREADED(threading[0]->n_core) 
-    data_layout_n_flavours( 2, &l, threading[omp_get_thread_num()] );
-#else
-  error0("For DDalphaAMG_solve_doublet_*, HAVE_TM1p1 flag required\n");
-#endif
-
+  set_n_flavours( 2 );
   DDalphaAMG_driver( vector1_out, vector1_in, vector2_out, vector2_in, tol, mg_status, _SOLVE_SQ );
+  set_n_flavours( 1 );
+}
 
-#ifdef HAVE_TM1p1
-  THREADED(threading[0]->n_core)
-    data_layout_n_flavours( 1, &l, threading[omp_get_thread_num()] );
-#endif
+void DDalphaAMG_solve_ms_doublet_squared( double **vector1_out, double *vector1_in,
+                                          double **vector2_out, double *vector2_in,
+                                          double  *even_shifts, double *odd_shifts, int n_shifts,
+                                          double tol, DDalphaAMG_status *mg_status )
+{
+  set_n_flavours( 2 );
+  DDalphaAMG_ms_driver( vector1_out, vector1_in, vector2_out, vector2_in, even_shifts, odd_shifts, n_shifts,
+                        tol, mg_status, _SOLVE_SQ );
+  set_n_flavours( 1 );
 }
 
 void DDalphaAMG_solve_squared_odd( double *vector_out, double *vector_in, double tol, DDalphaAMG_status *mg_status )
@@ -1035,19 +1533,20 @@ void DDalphaAMG_solve_doublet_squared_odd( double *vector1_out, double *vector1_
                                            double *vector2_out, double *vector2_in,
                                            double tol, DDalphaAMG_status *mg_status )
 {
-#ifdef HAVE_TM1p1
-  THREADED(threading[0]->n_core)
-    data_layout_n_flavours( 2, &l, threading[omp_get_thread_num()] );
-#else
-  error0("For DDalphaAMG_solve_doublet_*, HAVE_TM1p1 flag required\n");
-#endif
-
+  set_n_flavours( 2 );
   DDalphaAMG_driver( vector1_out, vector1_in, vector2_out, vector2_in, tol, mg_status, _SOLVE_SQ_ODD );
+  set_n_flavours( 1 );
+}
 
-#ifdef HAVE_TM1p1
-  THREADED(threading[0]->n_core)
-    data_layout_n_flavours( 1, &l, threading[omp_get_thread_num()] );
-#endif
+void DDalphaAMG_solve_ms_doublet_squared_odd( double **vector1_out, double *vector1_in,
+                                              double **vector2_out, double *vector2_in,
+                                              double  *even_shifts, double *odd_shifts, int n_shifts,
+                                              double tol, DDalphaAMG_status *mg_status )
+{
+  set_n_flavours( 2 );
+  DDalphaAMG_ms_driver( vector1_out, vector1_in, vector2_out, vector2_in, even_shifts, odd_shifts, n_shifts,
+                        tol, mg_status, _SOLVE_SQ_ODD );
+  set_n_flavours( 1 );
 }
 
 void DDalphaAMG_solve_squared_even( double *vector_out, double *vector_in, double tol, DDalphaAMG_status *mg_status )
@@ -1059,19 +1558,20 @@ void DDalphaAMG_solve_doublet_squared_even( double *vector1_out, double *vector1
                                             double *vector2_out, double *vector2_in,
                                             double tol, DDalphaAMG_status *mg_status )
 {
-#ifdef HAVE_TM1p1
-  THREADED(threading[0]->n_core)
-    data_layout_n_flavours( 2, &l, threading[omp_get_thread_num()] );
-#else
-  error0("For DDalphaAMG_solve_doublet_*, HAVE_TM1p1 flag required\n");
-#endif
-
+  set_n_flavours( 2 );
   DDalphaAMG_driver( vector1_out, vector1_in, vector2_out, vector2_in, tol, mg_status, _SOLVE_SQ_EVEN );
+  set_n_flavours( 1 );
+}
 
-#ifdef HAVE_TM1p1
-  THREADED(threading[0]->n_core)
-    data_layout_n_flavours( 1, &l, threading[omp_get_thread_num()] );
-#endif
+void DDalphaAMG_solve_ms_doublet_squared_even( double **vector1_out, double *vector1_in,
+                                               double **vector2_out, double *vector2_in,
+                                               double  *even_shifts, double *odd_shifts, int n_shifts,
+                                               double tol, DDalphaAMG_status *mg_status )
+{
+  set_n_flavours( 2 );
+  DDalphaAMG_ms_driver( vector1_out, vector1_in, vector2_out, vector2_in, even_shifts, odd_shifts, n_shifts,
+                        tol, mg_status, _SOLVE_SQ_EVEN );
+  set_n_flavours( 1 );
 }
 
 void DDalphaAMG_apply_operator( double *vector_out, double *vector_in, DDalphaAMG_status *mg_status ) {
@@ -1081,19 +1581,9 @@ void DDalphaAMG_apply_operator( double *vector_out, double *vector_in, DDalphaAM
 void DDalphaAMG_apply_operator_doublet( double *vector1_out, double *vector1_in,
                                         double *vector2_out, double *vector2_in, DDalphaAMG_status *mg_status )
 {
-#ifdef HAVE_TM1p1
-  THREADED(threading[0]->n_core)
-    data_layout_n_flavours( 2, &l, threading[omp_get_thread_num()] );
-#else
-  error0("For DDalphaAMG_solve_doublet_*, HAVE_TM1p1 flag required\n");
-#endif
-
+  set_n_flavours( 2 );
   DDalphaAMG_driver( vector1_out, vector1_in, vector2_out, vector2_in, 0, mg_status, _OPERATOR );
-
-#ifdef HAVE_TM1p1
-  THREADED(threading[0]->n_core)
-    data_layout_n_flavours( 1, &l, threading[omp_get_thread_num()] );
-#endif
+  set_n_flavours( 1 );
 }
 
 void DDalphaAMG_preconditioner( double *vector_out, double *vector_in, DDalphaAMG_status * mg_status ) {
@@ -1103,19 +1593,9 @@ void DDalphaAMG_preconditioner( double *vector_out, double *vector_in, DDalphaAM
 void DDalphaAMG_preconditioner_doublet( double *vector1_out, double *vector1_in,
                                         double *vector2_out, double *vector2_in, DDalphaAMG_status *mg_status )
 {
-#ifdef HAVE_TM1p1
-  THREADED(threading[0]->n_core)
-    data_layout_n_flavours( 2, &l, threading[omp_get_thread_num()] );
-#else
-  error0("For DDalphaAMG_solve_doublet_*, HAVE_TM1p1 flag required\n");
-#endif
-
+  set_n_flavours( 2 );
   DDalphaAMG_driver( vector1_out, vector1_in, vector2_out, vector2_in, 0, mg_status, _PRECOND );
-
-#ifdef HAVE_TM1p1
-  THREADED(threading[0]->n_core)
-    data_layout_n_flavours( 1, &l, threading[omp_get_thread_num()] );
-#endif
+  set_n_flavours( 1 );
 }
 
 void DDalphaAMG_free( void ) {
@@ -1206,7 +1686,6 @@ double DDalphaAMG_vector_norm( double *vector ) {
   double norm = 0;
   THREADED(threading[0]->n_core)
   if(vector!=NULL){
-    int start, end;
     norm = global_norm_double( (vector_double) vector, 0, l.inner_vector_size, &l, threading[omp_get_thread_num()] );
    }
   else {

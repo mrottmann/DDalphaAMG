@@ -102,3 +102,15 @@ void d_neighbor_aggregate_PRECISION_vectorized( complex_PRECISION *eta1, complex
   twospin2_p_PRECISION_vectorized_simd_length( eta1, eta2, buffer, mu );
 }
 #endif
+
+#ifdef SSE
+void diagonal_aggregate_PRECISION_vectorized( complex_PRECISION *eta1, complex_PRECISION *eta2,
+    complex_PRECISION *phi, schwarz_PRECISION_struct *s, level_struct *l,
+    int site ) {
+
+  int offset = SIMD_LENGTH_PRECISION;
+  int site_offset = 12*offset;
+
+  sse_diagonal_aggregate_PRECISION( eta1, eta2, phi+site_offset*site, s->op.odd_proj+12*site, offset );
+}
+#endif

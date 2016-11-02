@@ -35,6 +35,10 @@
     complex_PRECISION *phi, schwarz_PRECISION_struct *s, level_struct *l,
     int site, int *direction_flags );
 
+  void diagonal_aggregate_PRECISION_vectorized( complex_PRECISION *eta1, complex_PRECISION *eta2,
+                                              complex_PRECISION *phi, schwarz_PRECISION_struct *s,
+                                              level_struct *l, int site );
+
   // spinors are vectorized, gauge is same for all (use for multiple rhs)
   static inline void mvm_PRECISION_vectorized_simd_length(
       const complex_PRECISION *eta, const complex_PRECISION *D, const complex_PRECISION *phi ) {

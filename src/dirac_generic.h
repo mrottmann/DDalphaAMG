@@ -54,6 +54,8 @@
   void set_odd_to_zero_PRECISION( vector_PRECISION eta, vector_PRECISION phi, level_struct *l, struct Thread *threading );
   void gamma5_set_odd_to_zero_PRECISION( vector_PRECISION eta, vector_PRECISION phi, level_struct *l, struct Thread *threading );
   void tau1_gamma5_set_odd_to_zero_PRECISION( vector_PRECISION eta, vector_PRECISION phi, level_struct *l, struct Thread *threading );
+  void scale_even_odd_PRECISION( vector_PRECISION eta, vector_PRECISION phi, complex_double even, complex_double odd,
+                                 level_struct *l, struct Thread *threading );
 
 
   static inline void add_diagonal_PRECISION( const vector_PRECISION eta, const vector_PRECISION phi,

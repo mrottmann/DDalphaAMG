@@ -135,7 +135,7 @@ void interpolate_PRECISION( vector_PRECISION phi, vector_PRECISION phi_c, level_
   
   PROF_PRECISION_START( _PR, threading );
   int i, j, k, k1, k2, num_aggregates = l->is_PRECISION.num_agg, num_eig_vect = l->num_eig_vect,
-      num_parent_eig_vect = l->num_lattice_site_var/2, aggregate_sites = l->num_inner_lattice_sites / num_aggregates;
+      num_parent_eig_vect = l->num_parent_eig_vect, aggregate_sites = l->num_inner_lattice_sites / num_aggregates;
   complex_PRECISION *operator = l->is_PRECISION.operator, *phi_pt = phi,
                     *phi_c_pt = l->next_level->gs_PRECISION.transfer_buffer;
                     
@@ -144,70 +144,169 @@ void interpolate_PRECISION( vector_PRECISION phi, vector_PRECISION phi_c, level_
   END_LOCKED_MASTER(threading)
   SYNC_HYPERTHREADS(threading)
   
-  for ( i=threading->n_thread*threading->core + threading->thread; i<num_aggregates; i+=threading->n_core*threading->n_thread ) {
-    phi_pt   = phi + i*2*num_parent_eig_vect*aggregate_sites;
-    phi_c_pt = l->next_level->gs_PRECISION.transfer_buffer + i*2*num_eig_vect;
-    float tmp_phi_c_re[2*OPERATOR_COMPONENT_OFFSET_float];
-    float tmp_phi_c_im[2*OPERATOR_COMPONENT_OFFSET_float];
-    __m128 zero =  _mm_setzero_ps();
-    for ( j=0; j<2*OPERATOR_COMPONENT_OFFSET_PRECISION; j+=SIMD_LENGTH_PRECISION ) {
-      _mm_store_ps(tmp_phi_c_re+j, zero);
-      _mm_store_ps(tmp_phi_c_im+j, zero);
-    }
-    // copy phi_c into temporary
-    for ( j=0; j<num_eig_vect; j++ ) {
-      tmp_phi_c_re[j] = creal(phi_c_pt[j]);
-      tmp_phi_c_im[j] = cimag(phi_c_pt[j]);
-    }
-    for ( j=0; j<num_eig_vect; j++ ) {
-      tmp_phi_c_re[j+OPERATOR_COMPONENT_OFFSET_PRECISION] = creal(phi_c_pt[j+num_eig_vect]);
-      tmp_phi_c_im[j+OPERATOR_COMPONENT_OFFSET_PRECISION] = cimag(phi_c_pt[j+num_eig_vect]);
-    }
+#ifdef HAVE_TM1p1
+  if( g.n_flavours==2 )  
+    for ( i=threading->n_thread*threading->core + threading->thread; i<num_aggregates; i+=threading->n_core*threading->n_thread ) {
+      phi_c_pt = l->next_level->gs_PRECISION.transfer_buffer + i*2*2*num_eig_vect;
+      float tmp_phi1_c_re[2*OPERATOR_COMPONENT_OFFSET_float];
+      float tmp_phi1_c_im[2*OPERATOR_COMPONENT_OFFSET_float];
+      float tmp_phi2_c_re[2*OPERATOR_COMPONENT_OFFSET_float];
+      float tmp_phi2_c_im[2*OPERATOR_COMPONENT_OFFSET_float];
+      __m128 zero =  _mm_setzero_ps();
+      for ( j=0; j<2*OPERATOR_COMPONENT_OFFSET_PRECISION; j+=SIMD_LENGTH_PRECISION ) {
+        _mm_store_ps(tmp_phi1_c_re+j, zero);
+        _mm_store_ps(tmp_phi1_c_im+j, zero);
+        _mm_store_ps(tmp_phi2_c_re+j, zero);
+        _mm_store_ps(tmp_phi2_c_im+j, zero);
+      }
+      // copy phi_c into temporary
+      for ( j=0; j<num_eig_vect; j++ ) {
+        tmp_phi1_c_re[j] = creal(phi_c_pt[j]);
+        tmp_phi1_c_im[j] = cimag(phi_c_pt[j]);
+      }
+      for ( j=0; j<num_eig_vect; j++ ) {
+        tmp_phi2_c_re[j] = creal(phi_c_pt[j+num_eig_vect]);
+        tmp_phi2_c_im[j] = cimag(phi_c_pt[j+num_eig_vect]);
+      }
+      for ( j=0; j<num_eig_vect; j++ ) {
+        tmp_phi1_c_re[j+OPERATOR_COMPONENT_OFFSET_PRECISION] = creal(phi_c_pt[j+2*num_eig_vect]);
+        tmp_phi1_c_im[j+OPERATOR_COMPONENT_OFFSET_PRECISION] = cimag(phi_c_pt[j+2*num_eig_vect]);
+      }
+      for ( j=0; j<num_eig_vect; j++ ) {
+        tmp_phi2_c_re[j+OPERATOR_COMPONENT_OFFSET_PRECISION] = creal(phi_c_pt[j+3*num_eig_vect]);
+        tmp_phi2_c_im[j+OPERATOR_COMPONENT_OFFSET_PRECISION] = cimag(phi_c_pt[j+3*num_eig_vect]);
+      }
+      
+      int offset = SIMD_LENGTH_PRECISION;
+      // loop over blocks of SIMD_LENGTH_PRECISION vectors
+      for ( j=0; j<num_eig_vect; j+=offset ) {
+        phi_pt   = phi + i*2*2*num_parent_eig_vect*aggregate_sites;
+        operator = l->is_PRECISION.operator + j*l->vector_size/2 + i*2*offset*num_parent_eig_vect*aggregate_sites;
+        
+        for ( k=0; k<aggregate_sites; k++ ) {
+          // offset used for 2 components of gamma5-symmetry stuff
+          int low_high_offset = 0;
+          for ( k1=0; k1<2; k1++ ) {
+            for ( k2=0; k2<num_parent_eig_vect; k2++ ) {
+              __m128 phi1_re = _mm_setzero_ps();
+              __m128 phi1_im = _mm_setzero_ps();
+              __m128 phi2_re = _mm_setzero_ps();
+              __m128 phi2_im = _mm_setzero_ps();
+              
+              __m128 operator_re = _mm_load_ps((float *)operator);
+              __m128 operator_im = _mm_load_ps((float *)operator+offset);
+              __m128 phi1_c_re = _mm_load_ps(tmp_phi1_c_re+j+low_high_offset);
+              __m128 phi1_c_im = _mm_load_ps(tmp_phi1_c_im+j+low_high_offset);
+              __m128 phi2_c_re = _mm_load_ps(tmp_phi2_c_re+j+low_high_offset);
+              __m128 phi2_c_im = _mm_load_ps(tmp_phi2_c_im+j+low_high_offset);
+              
+              cfmadd(operator_re, operator_im, phi1_c_re, phi1_c_im, &phi1_re, &phi1_im);
+              cfmadd(operator_re, operator_im, phi2_c_re, phi2_c_im, &phi2_re, &phi2_im);
+              
+              // skip to next real line of matrix
+              operator += offset;
+              // horizontal sum for phi
+              __m128 tmp;
+              tmp = _mm_add_ps( phi1_re, _mm_movehl_ps( phi1_re, phi1_re ) );
+              phi1_re = _mm_add_ss( tmp, _mm_shuffle_ps( tmp, tmp, 1 ) );
+              
+              tmp = _mm_add_ps( phi1_im, _mm_movehl_ps( phi1_im, phi1_im ) );
+              phi1_im = _mm_add_ss( tmp, _mm_shuffle_ps( tmp, tmp, 1 ) );
 
-    int offset = SIMD_LENGTH_PRECISION;
-    // loop over blocks of SIMD_LENGTH_PRECISION vectors
-    for ( j=0; j<num_eig_vect; j+=offset ) {
-      phi_pt   = phi + i*2*num_parent_eig_vect*aggregate_sites;
-      operator = l->is_PRECISION.operator + j*l->vector_size + i*2*offset*num_parent_eig_vect*aggregate_sites;
-
-      for ( k=0; k<aggregate_sites; k++ ) {
-        // offset used for 2 components of gamma5-symmetry stuff
-        int low_high_offset = 0;
-        for ( k1=0; k1<2; k1++ ) {
-          for ( k2=0; k2<num_parent_eig_vect; k2++ ) {
-            __m128 phi_re = _mm_setzero_ps();
-            __m128 phi_im = _mm_setzero_ps();
-            
-            __m128 operator_re = _mm_load_ps((float *)operator);
-            __m128 operator_im = _mm_load_ps((float *)operator+offset);
-            __m128 phi_c_re = _mm_load_ps(tmp_phi_c_re+j+low_high_offset);
-            __m128 phi_c_im = _mm_load_ps(tmp_phi_c_im+j+low_high_offset);
-
-            cfmadd(operator_re, operator_im, phi_c_re, phi_c_im, &phi_re, &phi_im);
-
-            // skip to next real line of matrix
-            operator += offset;
-            // horizontal sum for phi
-            __m128 tmp;
-            tmp = _mm_add_ps( phi_re, _mm_movehl_ps( phi_re, phi_re ) );
-            phi_re = _mm_add_ss( tmp, _mm_shuffle_ps( tmp, tmp, 1 ) );
-            
-            tmp = _mm_add_ps( phi_im, _mm_movehl_ps( phi_im, phi_im ) );
-            phi_im = _mm_add_ss( tmp, _mm_shuffle_ps( tmp, tmp, 1 ) );
-            
-            __m128 tmp1; tmp1 = _mm_set1_ps(((float *)phi_pt)[0]);
-            __m128 tmp2; tmp2 = _mm_set1_ps(((float *)phi_pt)[1]);
-            phi_re = _mm_add_ps(phi_re, tmp1);
-            phi_im = _mm_add_ps(phi_im, tmp2);
-            _mm_store_ss( (float*)phi_pt, phi_re );
-            _mm_store_ss( ((float*)phi_pt)+1, phi_im );
-            phi_pt++;
+              tmp = _mm_add_ps( phi2_re, _mm_movehl_ps( phi2_re, phi2_re ) );
+              phi2_re = _mm_add_ss( tmp, _mm_shuffle_ps( tmp, tmp, 1 ) );
+              
+              tmp = _mm_add_ps( phi2_im, _mm_movehl_ps( phi2_im, phi2_im ) );
+              phi2_im = _mm_add_ss( tmp, _mm_shuffle_ps( tmp, tmp, 1 ) );
+              
+              __m128 tmp1;
+              __m128 tmp2;
+              tmp1 = _mm_set1_ps(((float *)phi_pt)[0]);
+              tmp2 = _mm_set1_ps(((float *)phi_pt)[1]);
+              phi1_re = _mm_add_ps(phi1_re, tmp1);
+              phi1_im = _mm_add_ps(phi1_im, tmp2);
+              tmp1 = _mm_set1_ps(((float *)phi_pt)[0+2*num_parent_eig_vect]);
+              tmp2 = _mm_set1_ps(((float *)phi_pt)[1+2*num_parent_eig_vect]);
+              phi2_re = _mm_add_ps(phi2_re, tmp1);
+              phi2_im = _mm_add_ps(phi2_im, tmp2);
+              _mm_store_ss( (float*)phi_pt, phi1_re );
+              _mm_store_ss( ((float*)phi_pt)+1, phi1_im );
+              _mm_store_ss( (float*)phi_pt+2*num_parent_eig_vect, phi2_re );
+              _mm_store_ss( ((float*)phi_pt)+2*num_parent_eig_vect+1, phi2_im );
+              phi_pt++;
+            }
+            phi_pt+=num_parent_eig_vect;
+            low_high_offset = OPERATOR_COMPONENT_OFFSET_PRECISION;
           }
-          low_high_offset = OPERATOR_COMPONENT_OFFSET_PRECISION;
         }
       }
     }
-  }
+  else
+#endif  
+    for ( i=threading->n_thread*threading->core + threading->thread; i<num_aggregates; i+=threading->n_core*threading->n_thread ) {
+      phi_pt   = phi + i*2*num_parent_eig_vect*aggregate_sites;
+      phi_c_pt = l->next_level->gs_PRECISION.transfer_buffer + i*2*num_eig_vect;
+      float tmp_phi_c_re[2*OPERATOR_COMPONENT_OFFSET_float];
+      float tmp_phi_c_im[2*OPERATOR_COMPONENT_OFFSET_float];
+      __m128 zero =  _mm_setzero_ps();
+      for ( j=0; j<2*OPERATOR_COMPONENT_OFFSET_PRECISION; j+=SIMD_LENGTH_PRECISION ) {
+        _mm_store_ps(tmp_phi_c_re+j, zero);
+        _mm_store_ps(tmp_phi_c_im+j, zero);
+      }
+      // copy phi_c into temporary
+      for ( j=0; j<num_eig_vect; j++ ) {
+        tmp_phi_c_re[j] = creal(phi_c_pt[j]);
+        tmp_phi_c_im[j] = cimag(phi_c_pt[j]);
+      }
+      for ( j=0; j<num_eig_vect; j++ ) {
+        tmp_phi_c_re[j+OPERATOR_COMPONENT_OFFSET_PRECISION] = creal(phi_c_pt[j+num_eig_vect]);
+        tmp_phi_c_im[j+OPERATOR_COMPONENT_OFFSET_PRECISION] = cimag(phi_c_pt[j+num_eig_vect]);
+      }
+      
+      int offset = SIMD_LENGTH_PRECISION;
+      // loop over blocks of SIMD_LENGTH_PRECISION vectors
+      for ( j=0; j<num_eig_vect; j+=offset ) {
+        phi_pt   = phi + i*2*num_parent_eig_vect*aggregate_sites;
+        operator = l->is_PRECISION.operator + j*l->vector_size + i*2*offset*num_parent_eig_vect*aggregate_sites;
+        
+        for ( k=0; k<aggregate_sites; k++ ) {
+          // offset used for 2 components of gamma5-symmetry stuff
+          int low_high_offset = 0;
+          for ( k1=0; k1<2; k1++ ) {
+            for ( k2=0; k2<num_parent_eig_vect; k2++ ) {
+              __m128 phi_re = _mm_setzero_ps();
+              __m128 phi_im = _mm_setzero_ps();
+              
+              __m128 operator_re = _mm_load_ps((float *)operator);
+              __m128 operator_im = _mm_load_ps((float *)operator+offset);
+              __m128 phi_c_re = _mm_load_ps(tmp_phi_c_re+j+low_high_offset);
+              __m128 phi_c_im = _mm_load_ps(tmp_phi_c_im+j+low_high_offset);
+              
+              cfmadd(operator_re, operator_im, phi_c_re, phi_c_im, &phi_re, &phi_im);
+              
+              // skip to next real line of matrix
+              operator += offset;
+              // horizontal sum for phi
+              __m128 tmp;
+              tmp = _mm_add_ps( phi_re, _mm_movehl_ps( phi_re, phi_re ) );
+              phi_re = _mm_add_ss( tmp, _mm_shuffle_ps( tmp, tmp, 1 ) );
+              
+              tmp = _mm_add_ps( phi_im, _mm_movehl_ps( phi_im, phi_im ) );
+              phi_im = _mm_add_ss( tmp, _mm_shuffle_ps( tmp, tmp, 1 ) );
+              
+              __m128 tmp1; tmp1 = _mm_set1_ps(((float *)phi_pt)[0]);
+              __m128 tmp2; tmp2 = _mm_set1_ps(((float *)phi_pt)[1]);
+              phi_re = _mm_add_ps(phi_re, tmp1);
+              phi_im = _mm_add_ps(phi_im, tmp2);
+              _mm_store_ss( (float*)phi_pt, phi_re );
+              _mm_store_ss( ((float*)phi_pt)+1, phi_im );
+              phi_pt++;
+            }
+            low_high_offset = OPERATOR_COMPONENT_OFFSET_PRECISION;
+          }
+        }
+      }
+    }
     
   PROF_PRECISION_STOP( _PR, 1, threading );
 
@@ -220,7 +319,7 @@ void interpolate3_PRECISION( vector_PRECISION phi, vector_PRECISION phi_c, level
   
   PROF_PRECISION_START( _PR, threading );
   int i, j, k, k1, k2, num_aggregates = l->is_PRECISION.num_agg, num_eig_vect = l->num_eig_vect,
-      num_parent_eig_vect = l->num_lattice_site_var/2, aggregate_sites = l->num_inner_lattice_sites / num_aggregates;
+      num_parent_eig_vect = l->num_parent_eig_vect, aggregate_sites = l->num_inner_lattice_sites / num_aggregates;
   complex_PRECISION *operator = l->is_PRECISION.operator, *phi_pt = phi,
                     *phi_c_pt = l->next_level->gs_PRECISION.transfer_buffer;
   
@@ -228,74 +327,176 @@ void interpolate3_PRECISION( vector_PRECISION phi, vector_PRECISION phi_c, level
   vector_PRECISION_distribute( phi_c_pt, phi_c, l->next_level );
   END_LOCKED_MASTER(threading)
   SYNC_HYPERTHREADS(threading)
-  
-  for ( i=threading->n_thread*threading->core + threading->thread; i<num_aggregates; i+=threading->n_core*threading->n_thread ) {
-    phi_pt   = phi + i*2*num_parent_eig_vect*aggregate_sites;
-    phi_c_pt = l->next_level->gs_PRECISION.transfer_buffer + i*2*num_eig_vect;
-    float tmp_phi_c_re[2*OPERATOR_COMPONENT_OFFSET_float];
-    float tmp_phi_c_im[2*OPERATOR_COMPONENT_OFFSET_float];
-    __m128 zero =  _mm_setzero_ps();
-    for ( j=0; j<2*OPERATOR_COMPONENT_OFFSET_PRECISION; j+=SIMD_LENGTH_PRECISION ) {
-      _mm_store_ps(tmp_phi_c_re+j, zero);
-      _mm_store_ps(tmp_phi_c_im+j, zero);
-    }
-    // copy phi_c into temporary
-    for ( j=0; j<num_eig_vect; j++ ) {
-      tmp_phi_c_re[j] = creal(phi_c_pt[j]);
-      tmp_phi_c_im[j] = cimag(phi_c_pt[j]);
-    }
-    for ( j=0; j<num_eig_vect; j++ ) {
-      tmp_phi_c_re[j+OPERATOR_COMPONENT_OFFSET_PRECISION] = creal(phi_c_pt[j+num_eig_vect]);
-      tmp_phi_c_im[j+OPERATOR_COMPONENT_OFFSET_PRECISION] = cimag(phi_c_pt[j+num_eig_vect]);
-    }
 
-    int offset = SIMD_LENGTH_PRECISION;
-    // loop over blocks of SIMD_LENGTH_PRECISION vectors
-    for ( j=0; j<num_eig_vect; j+=offset ) {
-      phi_pt   = phi + i*2*num_parent_eig_vect*aggregate_sites;
-      operator = l->is_PRECISION.operator + j*l->vector_size + i*2*offset*num_parent_eig_vect*aggregate_sites;
+#ifdef HAVE_TM1p1
+  if( g.n_flavours==2 )
+    for ( i=threading->n_thread*threading->core + threading->thread; i<num_aggregates; i+=threading->n_core*threading->n_thread ) {
+      phi_c_pt = l->next_level->gs_PRECISION.transfer_buffer + i*2*2*num_eig_vect;
 
-      for ( k=0; k<aggregate_sites; k++ ) {
-        // offset used for 2 components of gamma5-symmetry stuff
-        int low_high_offset = 0;
-        for ( k1=0; k1<2; k1++ ) {
-          for ( k2=0; k2<num_parent_eig_vect; k2++ ) {
-            __m128 phi_re = _mm_setzero_ps();
-            __m128 phi_im = _mm_setzero_ps();
+      float tmp_phi1_c_re[2*OPERATOR_COMPONENT_OFFSET_float];
+      float tmp_phi1_c_im[2*OPERATOR_COMPONENT_OFFSET_float];
+      float tmp_phi2_c_re[2*OPERATOR_COMPONENT_OFFSET_float];
+      float tmp_phi2_c_im[2*OPERATOR_COMPONENT_OFFSET_float];
+      __m128 zero =  _mm_setzero_ps();
+      for ( j=0; j<2*OPERATOR_COMPONENT_OFFSET_PRECISION; j+=SIMD_LENGTH_PRECISION ) {
+        _mm_store_ps(tmp_phi1_c_re+j, zero);
+        _mm_store_ps(tmp_phi1_c_im+j, zero);
+        _mm_store_ps(tmp_phi2_c_re+j, zero);
+        _mm_store_ps(tmp_phi2_c_im+j, zero);
+      }
+      // copy phi_c into temporary
+      for ( j=0; j<num_eig_vect; j++ ) {
+        tmp_phi1_c_re[j] = creal(phi_c_pt[j]);
+        tmp_phi1_c_im[j] = cimag(phi_c_pt[j]);
+      }
+      for ( j=0; j<num_eig_vect; j++ ) {
+        tmp_phi2_c_re[j] = creal(phi_c_pt[j+num_eig_vect]);
+        tmp_phi2_c_im[j] = cimag(phi_c_pt[j+num_eig_vect]);
+      }
+      for ( j=0; j<num_eig_vect; j++ ) {
+        tmp_phi1_c_re[j+OPERATOR_COMPONENT_OFFSET_PRECISION] = creal(phi_c_pt[j+2*num_eig_vect]);
+        tmp_phi1_c_im[j+OPERATOR_COMPONENT_OFFSET_PRECISION] = cimag(phi_c_pt[j+2*num_eig_vect]);
+      }
+      for ( j=0; j<num_eig_vect; j++ ) {
+        tmp_phi2_c_re[j+OPERATOR_COMPONENT_OFFSET_PRECISION] = creal(phi_c_pt[j+3*num_eig_vect]);
+        tmp_phi2_c_im[j+OPERATOR_COMPONENT_OFFSET_PRECISION] = cimag(phi_c_pt[j+3*num_eig_vect]);
+      }
+      
+      int offset = SIMD_LENGTH_PRECISION;
+      // loop over blocks of SIMD_LENGTH_PRECISION vectors
+      for ( j=0; j<num_eig_vect; j+=offset ) {
+        phi_pt   = phi + i*2*2*num_parent_eig_vect*aggregate_sites;
+        operator = l->is_PRECISION.operator + j*l->vector_size/2 + i*2*offset*num_parent_eig_vect*aggregate_sites;
+        
+        for ( k=0; k<aggregate_sites; k++ ) {
+          // offset used for 2 components of gamma5-symmetry stuff
+          int low_high_offset = 0;
+          for ( k1=0; k1<2; k1++ ) {
+            for ( k2=0; k2<num_parent_eig_vect; k2++ ) {
+              __m128 phi1_re = _mm_setzero_ps();
+              __m128 phi1_im = _mm_setzero_ps();
+              __m128 phi2_re = _mm_setzero_ps();
+              __m128 phi2_im = _mm_setzero_ps();
+              
+              __m128 operator_re = _mm_load_ps((float *)operator);
+              __m128 operator_im = _mm_load_ps((float *)operator+offset);
+              __m128 phi1_c_re = _mm_load_ps(tmp_phi1_c_re+j+low_high_offset);
+              __m128 phi1_c_im = _mm_load_ps(tmp_phi1_c_im+j+low_high_offset);
+              __m128 phi2_c_re = _mm_load_ps(tmp_phi2_c_re+j+low_high_offset);
+              __m128 phi2_c_im = _mm_load_ps(tmp_phi2_c_im+j+low_high_offset);
+              
+              cfmadd(operator_re, operator_im, phi1_c_re, phi1_c_im, &phi1_re, &phi1_im);
+              cfmadd(operator_re, operator_im, phi2_c_re, phi2_c_im, &phi2_re, &phi2_im);
+              
+              // skip to next real line of matrix
+              operator += offset;
+              // horizontal sum for phi            
+              __m128 tmp;
+              tmp = _mm_add_ps( phi1_re, _mm_movehl_ps( phi1_re, phi1_re ) );
+              phi1_re = _mm_add_ss( tmp, _mm_shuffle_ps( tmp, tmp, 1 ) );
+              
+              tmp = _mm_add_ps( phi1_im, _mm_movehl_ps( phi1_im, phi1_im ) );
+              phi1_im = _mm_add_ss( tmp, _mm_shuffle_ps( tmp, tmp, 1 ) );
 
-            __m128 operator_re = _mm_load_ps((float *)operator);
-            __m128 operator_im = _mm_load_ps((float *)operator+offset);
-            __m128 phi_c_re = _mm_load_ps(tmp_phi_c_re+j+low_high_offset);
-            __m128 phi_c_im = _mm_load_ps(tmp_phi_c_im+j+low_high_offset);
-
-            cfmadd(operator_re, operator_im, phi_c_re, phi_c_im, &phi_re, &phi_im);
-
-            // skip to next real line of matrix
-            operator += offset;
-            // horizontal sum for phi            
-            __m128 tmp;
-            tmp = _mm_add_ps( phi_re, _mm_movehl_ps( phi_re, phi_re ) );
-            phi_re = _mm_add_ss( tmp, _mm_shuffle_ps( tmp, tmp, 1 ) );
-            
-            tmp = _mm_add_ps( phi_im, _mm_movehl_ps( phi_im, phi_im ) );
-            phi_im = _mm_add_ss( tmp, _mm_shuffle_ps( tmp, tmp, 1 ) );
-            
-            if ( j!= 0 ) {
-              __m128 tmp1; tmp1 = _mm_set1_ps(((float *)phi_pt)[0]);
-              __m128 tmp2; tmp2 = _mm_set1_ps(((float *)phi_pt)[1]);
-              phi_re = _mm_add_ps(phi_re, tmp1);
-              phi_im = _mm_add_ps(phi_im, tmp2);
+              tmp = _mm_add_ps( phi2_re, _mm_movehl_ps( phi2_re, phi2_re ) );
+              phi2_re = _mm_add_ss( tmp, _mm_shuffle_ps( tmp, tmp, 1 ) );
+              
+              tmp = _mm_add_ps( phi2_im, _mm_movehl_ps( phi2_im, phi2_im ) );
+              phi2_im = _mm_add_ss( tmp, _mm_shuffle_ps( tmp, tmp, 1 ) );
+              
+              if ( j!= 0 ) {
+                __m128 tmp1;
+                __m128 tmp2;
+                tmp1 = _mm_set1_ps(((float *)phi_pt)[0]);
+                tmp2 = _mm_set1_ps(((float *)phi_pt)[1]);
+                phi1_re = _mm_add_ps(phi1_re, tmp1);
+                phi1_im = _mm_add_ps(phi1_im, tmp2);
+                tmp1 = _mm_set1_ps(((float *)phi_pt)[0+2*num_parent_eig_vect]);
+                tmp2 = _mm_set1_ps(((float *)phi_pt)[1+2*num_parent_eig_vect]);
+                phi2_re = _mm_add_ps(phi2_re, tmp1);
+                phi2_im = _mm_add_ps(phi2_im, tmp2);
+              }
+              _mm_store_ss( (float*)phi_pt, phi1_re );
+              _mm_store_ss( ((float*)phi_pt)+1, phi1_im );
+              _mm_store_ss( (float*)phi_pt+2*num_parent_eig_vect, phi2_re );
+              _mm_store_ss( ((float*)phi_pt)+2*num_parent_eig_vect+1, phi2_im );
+              phi_pt++;
             }
-            _mm_store_ss( (float*)phi_pt, phi_re );
-            _mm_store_ss( ((float*)phi_pt)+1, phi_im );
-            phi_pt++;
+            phi_pt+=num_parent_eig_vect;
+            low_high_offset = OPERATOR_COMPONENT_OFFSET_PRECISION;
           }
-          low_high_offset = OPERATOR_COMPONENT_OFFSET_PRECISION;
         }
       }
     }
-  }
-    
+  else
+#endif  
+    for ( i=threading->n_thread*threading->core + threading->thread; i<num_aggregates; i+=threading->n_core*threading->n_thread ) {
+      phi_pt   = phi + i*2*num_parent_eig_vect*aggregate_sites;
+      phi_c_pt = l->next_level->gs_PRECISION.transfer_buffer + i*2*num_eig_vect;
+      float tmp_phi_c_re[2*OPERATOR_COMPONENT_OFFSET_float];
+      float tmp_phi_c_im[2*OPERATOR_COMPONENT_OFFSET_float];
+      __m128 zero =  _mm_setzero_ps();
+      for ( j=0; j<2*OPERATOR_COMPONENT_OFFSET_PRECISION; j+=SIMD_LENGTH_PRECISION ) {
+        _mm_store_ps(tmp_phi_c_re+j, zero);
+        _mm_store_ps(tmp_phi_c_im+j, zero);
+      }
+      // copy phi_c into temporary
+      for ( j=0; j<num_eig_vect; j++ ) {
+        tmp_phi_c_re[j] = creal(phi_c_pt[j]);
+        tmp_phi_c_im[j] = cimag(phi_c_pt[j]);
+      }
+      for ( j=0; j<num_eig_vect; j++ ) {
+        tmp_phi_c_re[j+OPERATOR_COMPONENT_OFFSET_PRECISION] = creal(phi_c_pt[j+num_eig_vect]);
+        tmp_phi_c_im[j+OPERATOR_COMPONENT_OFFSET_PRECISION] = cimag(phi_c_pt[j+num_eig_vect]);
+      }
+      
+      int offset = SIMD_LENGTH_PRECISION;
+      // loop over blocks of SIMD_LENGTH_PRECISION vectors
+      for ( j=0; j<num_eig_vect; j+=offset ) {
+        phi_pt   = phi + i*2*num_parent_eig_vect*aggregate_sites;
+        operator = l->is_PRECISION.operator + j*l->vector_size + i*2*offset*num_parent_eig_vect*aggregate_sites;
+        
+        for ( k=0; k<aggregate_sites; k++ ) {
+          // offset used for 2 components of gamma5-symmetry stuff
+          int low_high_offset = 0;
+          for ( k1=0; k1<2; k1++ ) {
+            for ( k2=0; k2<num_parent_eig_vect; k2++ ) {
+              __m128 phi_re = _mm_setzero_ps();
+              __m128 phi_im = _mm_setzero_ps();
+              
+              __m128 operator_re = _mm_load_ps((float *)operator);
+              __m128 operator_im = _mm_load_ps((float *)operator+offset);
+              __m128 phi_c_re = _mm_load_ps(tmp_phi_c_re+j+low_high_offset);
+              __m128 phi_c_im = _mm_load_ps(tmp_phi_c_im+j+low_high_offset);
+              
+              cfmadd(operator_re, operator_im, phi_c_re, phi_c_im, &phi_re, &phi_im);
+              
+              // skip to next real line of matrix
+              operator += offset;
+              // horizontal sum for phi            
+              __m128 tmp;
+              tmp = _mm_add_ps( phi_re, _mm_movehl_ps( phi_re, phi_re ) );
+              phi_re = _mm_add_ss( tmp, _mm_shuffle_ps( tmp, tmp, 1 ) );
+              
+              tmp = _mm_add_ps( phi_im, _mm_movehl_ps( phi_im, phi_im ) );
+              phi_im = _mm_add_ss( tmp, _mm_shuffle_ps( tmp, tmp, 1 ) );
+              
+              if ( j!= 0 ) {
+                __m128 tmp1; tmp1 = _mm_set1_ps(((float *)phi_pt)[0]);
+                __m128 tmp2; tmp2 = _mm_set1_ps(((float *)phi_pt)[1]);
+                phi_re = _mm_add_ps(phi_re, tmp1);
+                phi_im = _mm_add_ps(phi_im, tmp2);
+              }
+              _mm_store_ss( (float*)phi_pt, phi_re );
+              _mm_store_ss( ((float*)phi_pt)+1, phi_im );
+              phi_pt++;
+            }
+            low_high_offset = OPERATOR_COMPONENT_OFFSET_PRECISION;
+          }
+        }
+      }
+    }
+  
   PROF_PRECISION_STOP( _PR, 1, threading );
 
   SYNC_HYPERTHREADS(threading)
@@ -309,72 +510,154 @@ void restrict_PRECISION( vector_PRECISION phi_c, vector_PRECISION phi, level_str
 
   PROF_PRECISION_START( _PR, threading );
   int i, j, k, k1, k2, num_aggregates = l->is_PRECISION.num_agg, num_eig_vect = l->num_eig_vect,
-      num_parent_eig_vect = l->num_lattice_site_var/2, aggregate_sites = l->num_inner_lattice_sites / num_aggregates;
+    num_parent_eig_vect = l->num_parent_eig_vect, aggregate_sites = l->num_inner_lattice_sites / num_aggregates;
   complex_PRECISION *operator = l->is_PRECISION.operator, *phi_pt = phi,
                     *phi_c_pt = l->next_level->gs_PRECISION.transfer_buffer;
 
-  for ( i=threading->n_thread*threading->core + threading->thread; i<num_aggregates; i+=threading->n_core*threading->n_thread ) {
-    
-    phi_pt   = phi + i*2*num_parent_eig_vect*aggregate_sites;
-    phi_c_pt = l->next_level->gs_PRECISION.transfer_buffer + i*2*num_eig_vect;
-
-    int offset = SIMD_LENGTH_PRECISION;
-    // loop over blocks of SIMD_LENGTH_PRECISION vectors
-    for ( j=0; j<num_eig_vect; j+=offset ) {
-      phi_pt   = phi + i*2*num_parent_eig_vect*aggregate_sites;
-      phi_c_pt = l->next_level->gs_PRECISION.transfer_buffer + i*2*num_eig_vect;
-      operator = l->is_PRECISION.operator + j*l->vector_size + i*2*offset*num_parent_eig_vect*aggregate_sites;
-
-      // temporary, so we can used aligned load/store, and don't have to mess around with deinterleaving
-      // complex components and masking
-      // factor 2 is for low/high (refers to spin components being split up for preserving gamma5-symmetry of coarse operator)
-      float tmp_phi_c_re[2*offset];
-      float tmp_phi_c_im[2*offset];
-      __m128 zero =  _mm_setzero_ps();
-      for ( k1=0; k1<2*offset; k1+=offset ) {
-        _mm_store_ps(tmp_phi_c_re+k1, zero);
-        _mm_store_ps(tmp_phi_c_im+k1, zero);
-      }
-
-      for ( k=0; k<aggregate_sites; k++ ) {
-        // offset used for 2 components of gamma5-symmetry stuff
-        int low_high_offset = 0;
-        for ( k1=0; k1<2; k1++ ) {
-          for ( k2=0; k2<num_parent_eig_vect; k2++ ) {
+#ifdef HAVE_TM1p1
+  if( g.n_flavours==2 )
+    for ( i=threading->n_thread*threading->core + threading->thread; i<num_aggregates; i+=threading->n_core*threading->n_thread ) {
+      
+      int offset = SIMD_LENGTH_PRECISION;
+      phi_c_pt = l->next_level->gs_PRECISION.transfer_buffer + i*2*2*num_eig_vect;
+      
+      // loop over blocks of SIMD_LENGTH_PRECISION vectors
+      for ( j=0; j<num_eig_vect; j+=offset ) {
+        phi_pt   = phi + i*2*2*num_parent_eig_vect*aggregate_sites;
+        operator = l->is_PRECISION.operator + j*l->vector_size/2 + i*2*offset*num_parent_eig_vect*aggregate_sites;
+        
+        // temporary, so we can used aligned load/store, and don't have to mess around with deinterleaving
+        // complex components and masking
+        // factor 2 is for low/high (refers to spin components being split up for preserving gamma5-symmetry of coarse operator)
+        float tmp_phi1_c_re[2*offset];
+        float tmp_phi1_c_im[2*offset];
+        float tmp_phi2_c_re[2*offset];
+        float tmp_phi2_c_im[2*offset];
+        __m128 zero =  _mm_setzero_ps();
+        for ( k1=0; k1<2*offset; k1+=offset ) {
+          _mm_store_ps(tmp_phi1_c_re+k1, zero);
+          _mm_store_ps(tmp_phi1_c_im+k1, zero);
+          _mm_store_ps(tmp_phi2_c_re+k1, zero);
+          _mm_store_ps(tmp_phi2_c_im+k1, zero);
+        }
+        
+        for ( k=0; k<aggregate_sites; k++ ) {
+          // offset used for 2 components of gamma5-symmetry stuff
+          int low_high_offset = 0;
+          for ( k1=0; k1<2; k1++ ) {
+            for ( k2=0; k2<num_parent_eig_vect; k2++ ) {
             // phi is the same for all eigenvectors -> broadcast
-            __m128 phi_re = _mm_set1_ps(((float *)phi_pt)[0]);
-            __m128 phi_im = _mm_set1_ps(((float *)phi_pt)[1]);
+              __m128 phi1_re = _mm_set1_ps(((float *)phi_pt)[0]);
+              __m128 phi1_im = _mm_set1_ps(((float *)phi_pt)[1]);
+              __m128 phi2_re = _mm_set1_ps(((float *)phi_pt)[0+2*num_parent_eig_vect]);
+              __m128 phi2_im = _mm_set1_ps(((float *)phi_pt)[1+2*num_parent_eig_vect]);
 
-            __m128 operator_re = _mm_load_ps((float *)operator);
-            __m128 operator_im = _mm_load_ps((float *)operator+offset);
-            __m128 phi_c_re = _mm_load_ps(tmp_phi_c_re+low_high_offset);
-            __m128 phi_c_im = _mm_load_ps(tmp_phi_c_im+low_high_offset);
-
-            cfmadd_conj(operator_re, operator_im, phi_re, phi_im, &phi_c_re, &phi_c_im);
-
-            _mm_store_ps(tmp_phi_c_re+low_high_offset, phi_c_re);
-            _mm_store_ps(tmp_phi_c_im+low_high_offset, phi_c_im);
-            // skip to next real line of matrix
-            operator += offset;
-            phi_pt++;
+              __m128 operator_re = _mm_load_ps((float *)operator);
+              __m128 operator_im = _mm_load_ps((float *)operator+offset);
+              __m128 phi1_c_re = _mm_load_ps(tmp_phi1_c_re+low_high_offset);
+              __m128 phi1_c_im = _mm_load_ps(tmp_phi1_c_im+low_high_offset);
+              __m128 phi2_c_re = _mm_load_ps(tmp_phi2_c_re+low_high_offset);
+              __m128 phi2_c_im = _mm_load_ps(tmp_phi2_c_im+low_high_offset);
+              
+              cfmadd_conj(operator_re, operator_im, phi1_re, phi1_im, &phi1_c_re, &phi1_c_im);
+              cfmadd_conj(operator_re, operator_im, phi2_re, phi2_im, &phi2_c_re, &phi2_c_im);
+              
+              _mm_store_ps(tmp_phi1_c_re+low_high_offset, phi1_c_re);
+              _mm_store_ps(tmp_phi1_c_im+low_high_offset, phi1_c_im);
+              _mm_store_ps(tmp_phi2_c_re+low_high_offset, phi2_c_re);
+              _mm_store_ps(tmp_phi2_c_im+low_high_offset, phi2_c_im);
+              // skip to next real line of matrix
+              operator += offset;
+              phi_pt++;
+            }
+            phi_pt += num_parent_eig_vect;
+            low_high_offset = offset;
           }
-          low_high_offset = offset;
+        }
+        
+        for ( int m=0; m<offset; m++ ) {
+          if ( m+j >= num_eig_vect ) break;
+          ((float*)(phi_c_pt+j+m))[0] = tmp_phi1_c_re[m];
+          ((float*)(phi_c_pt+j+m))[1] = tmp_phi1_c_im[m];
+        }
+        for ( int m=0; m<offset; m++ ) {
+          if ( m+j >= num_eig_vect ) break;
+          ((float*)(phi_c_pt+num_eig_vect+j+m))[0] = tmp_phi2_c_re[m];
+          ((float*)(phi_c_pt+num_eig_vect+j+m))[1] = tmp_phi2_c_im[m];
+        }
+        for ( int m=0; m<offset; m++ ) {
+          if ( m+j >= num_eig_vect ) break;
+          ((float*)(phi_c_pt+2*num_eig_vect+j+m))[0] = tmp_phi1_c_re[m+offset];
+          ((float*)(phi_c_pt+2*num_eig_vect+j+m))[1] = tmp_phi1_c_im[m+offset];
+        }
+        for ( int m=0; m<offset; m++ ) {
+          if ( m+j >= num_eig_vect ) break;
+          ((float*)(phi_c_pt+3*num_eig_vect+j+m))[0] = tmp_phi2_c_re[m+offset];
+          ((float*)(phi_c_pt+3*num_eig_vect+j+m))[1] = tmp_phi2_c_im[m+offset];
         }
       }
-
-      for ( int m=0; m<offset; m++ ) {
-        if ( m+j >= num_eig_vect ) break;
-        ((float*)(phi_c_pt+j+m))[0] = tmp_phi_c_re[m];
-        ((float*)(phi_c_pt+j+m))[1] = tmp_phi_c_im[m];
-      }
+    }
+  else
+#endif  
+    for ( i=threading->n_thread*threading->core + threading->thread; i<num_aggregates; i+=threading->n_core*threading->n_thread ) {
       
-      for ( int m=0; m<offset; m++ ) {
-        if ( m+j >= num_eig_vect ) break;
-        ((float*)(phi_c_pt+num_eig_vect+j+m))[0] = tmp_phi_c_re[m+offset];
-        ((float*)(phi_c_pt+num_eig_vect+j+m))[1] = tmp_phi_c_im[m+offset];
+      int offset = SIMD_LENGTH_PRECISION;
+      // loop over blocks of SIMD_LENGTH_PRECISION vectors
+      for ( j=0; j<num_eig_vect; j+=offset ) {
+        phi_pt   = phi + i*2*num_parent_eig_vect*aggregate_sites;
+        phi_c_pt = l->next_level->gs_PRECISION.transfer_buffer + i*2*num_eig_vect;
+        operator = l->is_PRECISION.operator + j*l->vector_size + i*2*offset*num_parent_eig_vect*aggregate_sites;
+        
+        // temporary, so we can used aligned load/store, and don't have to mess around with deinterleaving
+        // complex components and masking
+        // factor 2 is for low/high (refers to spin components being split up for preserving gamma5-symmetry of coarse operator)
+        float tmp_phi_c_re[2*offset];
+        float tmp_phi_c_im[2*offset];
+        __m128 zero =  _mm_setzero_ps();
+        for ( k1=0; k1<2*offset; k1+=offset ) {
+          _mm_store_ps(tmp_phi_c_re+k1, zero);
+          _mm_store_ps(tmp_phi_c_im+k1, zero);
+        }
+        
+        for ( k=0; k<aggregate_sites; k++ ) {
+          // offset used for 2 components of gamma5-symmetry stuff
+          int low_high_offset = 0;
+          for ( k1=0; k1<2; k1++ ) {
+            for ( k2=0; k2<num_parent_eig_vect; k2++ ) {
+            // phi is the same for all eigenvectors -> broadcast
+              __m128 phi_re = _mm_set1_ps(((float *)phi_pt)[0]);
+              __m128 phi_im = _mm_set1_ps(((float *)phi_pt)[1]);
+
+              __m128 operator_re = _mm_load_ps((float *)operator);
+              __m128 operator_im = _mm_load_ps((float *)operator+offset);
+              __m128 phi_c_re = _mm_load_ps(tmp_phi_c_re+low_high_offset);
+              __m128 phi_c_im = _mm_load_ps(tmp_phi_c_im+low_high_offset);
+              
+              cfmadd_conj(operator_re, operator_im, phi_re, phi_im, &phi_c_re, &phi_c_im);
+              
+              _mm_store_ps(tmp_phi_c_re+low_high_offset, phi_c_re);
+              _mm_store_ps(tmp_phi_c_im+low_high_offset, phi_c_im);
+              // skip to next real line of matrix
+              operator += offset;
+              phi_pt++;
+            }
+            low_high_offset = offset;
+          }
+        }
+        
+        for ( int m=0; m<offset; m++ ) {
+          if ( m+j >= num_eig_vect ) break;
+          ((float*)(phi_c_pt+j+m))[0] = tmp_phi_c_re[m];
+          ((float*)(phi_c_pt+j+m))[1] = tmp_phi_c_im[m];
+        }
+        
+        for ( int m=0; m<offset; m++ ) {
+          if ( m+j >= num_eig_vect ) break;
+          ((float*)(phi_c_pt+num_eig_vect+j+m))[0] = tmp_phi_c_re[m+offset];
+          ((float*)(phi_c_pt+num_eig_vect+j+m))[1] = tmp_phi_c_im[m+offset];
+        }
       }
     }
-  }
   
   SYNC_HYPERTHREADS(threading)
   START_LOCKED_MASTER(threading)

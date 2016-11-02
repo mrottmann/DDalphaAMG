@@ -181,7 +181,7 @@ void solve_driver( level_struct *l, struct Thread *threading ) {
 
   norm = global_norm_double( solution, 0, l->inner_vector_size, l, threading );
   printf0("solution vector norm: %le\n",norm);
-  
+
   PUBLIC_FREE( solution, complex_double, l->inner_vector_size );
   PUBLIC_FREE( source, complex_double, l->inner_vector_size );
 

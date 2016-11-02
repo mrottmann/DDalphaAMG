@@ -671,7 +671,7 @@ void m0_update( double m0, level_struct *l, struct Thread *threading ) {
     m0_update_double( m0, &(l->s_double.op), l, threading );
   
   START_LOCKED_MASTER(threading)
-  printf0("depth: %d, kappa updated to %f \n", (l->depth), 0.5/(m0 + 4.));
+  if(g.print>0) printf0("depth: %d, kappa updated to %f \n", (l->depth), 0.5/(m0 + 4.));
   END_LOCKED_MASTER(threading)
   
   if ( g.interpolation && l->level > 0 && l->next_level != NULL )
@@ -701,11 +701,13 @@ void tm_term_update( double mu, level_struct *l, struct Thread *threading ) {
     tm_term_double_setup( factor*mu, factor*even_shift, factor*odd_shift, &(l->s_double.op), l, threading );    
 
   START_MASTER(threading)
-  if( g.mu_even_shift == g.mu_odd_shift )
-    printf0("depth: %d, mu updated to %f \n", (l->depth), factor*(mu+even_shift));
-  else  
-    printf0("depth: %d, mu updated to %f on even sites and %f on odd sites \n", l->depth, factor*(mu+even_shift),
-            factor*(mu+odd_shift));
+  if(g.print>0) {
+    if( g.mu_even_shift == g.mu_odd_shift )
+      printf0("depth: %d, mu updated to %f \n", (l->depth), factor*(mu+even_shift));
+    else  
+      printf0("depth: %d, mu updated to %f on even sites and %f on odd sites \n", l->depth, factor*(mu+even_shift),
+              factor*(mu+odd_shift));
+  }
   END_MASTER(threading)
 
   if ( g.interpolation && l->level > 0 && l->next_level != NULL )
@@ -737,11 +739,13 @@ void epsbar_term_update( level_struct *l, struct Thread *threading ) {
     epsbar_term_double_setup( factor*epsbar, factor*even_shift, factor*odd_shift, &(l->s_double.op), l, threading );
 
   START_MASTER(threading)
-  if( even_shift == odd_shift )
-    printf0("depth: %d, epsbar term updated to %f + ig5 %f \n", l->depth, factor*epsbar, factor*even_shift);
-  else  
-    printf0("depth: %d, epsbar term updated to %f + ig5 %f on even sites and + ig5 %f on odd sites \n", l->depth,
-            factor*epsbar, factor*even_shift, factor*odd_shift);
+  if(g.print>0) {
+    if( even_shift == odd_shift )
+      printf0("depth: %d, epsbar term updated to %f + ig5 %f \n", l->depth, factor*epsbar, factor*even_shift);
+    else  
+      printf0("depth: %d, epsbar term updated to %f + ig5 %f on even sites and + ig5 %f on odd sites \n", l->depth,
+              factor*epsbar, factor*even_shift, factor*odd_shift);
+  }
   END_MASTER(threading)
 
   if ( g.interpolation && l->level > 0 && l->next_level != NULL )

@@ -462,6 +462,45 @@ static inline void sse_spin0and1_site_clover_float( const complex_float *eta, co
 #endif
 }
 
+static inline void sse_diagonal_aggregate_double( const complex_double *eta1, const complex_double *eta2, const complex_double *phi, const config_double diag, int elements ) {}
+
+static inline void sse_diagonal_aggregate_float( const complex_float *eta1, const complex_float *eta2, const complex_float *phi, const config_float diag, int elements ) {
+#ifdef SSE
+  // offset computations 2*index+0/1 are for real and imaginary parts
+
+  // diagonal
+  for(int i=0; i<elements; i+=SIMD_LENGTH_float) {
+    __m128 zero = _mm_setzero_ps();
+    for(int j=0; j<6; j++) {
+      __m128 factor = _mm_set1_ps(creal(diag[j]));
+      __m128 in_re  = _mm_load_ps((float *)phi + i + (2*j+0)*elements);
+      __m128 in_im  = _mm_load_ps((float *)phi + i + (2*j+1)*elements);
+      
+      in_re = _mm_mul_ps( factor, in_re );
+      in_im = _mm_mul_ps( factor, in_im );
+      
+      _mm_store_ps((float *)eta1 + i + (2*j+0)*elements, in_re);
+      _mm_store_ps((float *)eta1 + i + (2*j+1)*elements, in_im);
+      _mm_store_ps((float *)eta2 + i + (2*j+0)*elements, zero);
+      _mm_store_ps((float *)eta2 + i + (2*j+1)*elements, zero);
+    }
+    for(int j=6; j<12; j++) {
+      __m128 factor = _mm_set1_ps(creal(diag[j]));
+      __m128 in_re  = _mm_load_ps((float *)phi + i + (2*j+0)*elements);
+      __m128 in_im  = _mm_load_ps((float *)phi + i + (2*j+1)*elements);
+      
+      in_re = _mm_mul_ps( factor, in_re );
+      in_im = _mm_mul_ps( factor, in_im );
+      
+      _mm_store_ps((float *)eta2 + i + (2*j+0)*elements, in_re);
+      _mm_store_ps((float *)eta2 + i + (2*j+1)*elements, in_im);
+      _mm_store_ps((float *)eta1 + i + (2*j+0)*elements, zero);
+      _mm_store_ps((float *)eta1 + i + (2*j+1)*elements, zero);
+    }
+  }
+#endif
+}
+
 
 static inline void sse_spin2and3_site_clover_double( const complex_double *eta, const complex_double *phi, const config_double clover, double shift, int elements ) {}
 

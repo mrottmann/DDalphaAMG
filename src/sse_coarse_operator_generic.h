@@ -35,6 +35,9 @@
   void set_coarse_neighbor_coupling_PRECISION_vectorized( complex_PRECISION *buffer1, complex_PRECISION *buffer2,
       complex_PRECISION *V, const int mu, level_struct *l, int site, const int n_rhs, complex_PRECISION *tmp );
   void set_coarse_neighbor_coupling_PRECISION_vectorized_finalize( const int mu, level_struct *l, int site, const int n_rhs, complex_PRECISION *tmp );
+  void set_coarse_block_diagonal_PRECISION_vectorized( complex_PRECISION *spin_0_1, complex_PRECISION *spin_2_3,
+      complex_PRECISION *V, level_struct *l, int site, const int n_rhs, complex_PRECISION *tmp );
+  void set_coarse_block_diagonal_PRECISION_vectorized_finalize( level_struct *l, int site, const int n_rhs, complex_PRECISION *tmp );
 
   void copy_coarse_operator_to_vectorized_layout_PRECISION(config_PRECISION D,
       OPERATOR_TYPE_PRECISION *D_vectorized, int num_aggregates, int num_eig_vect);
@@ -58,6 +61,10 @@
   void coarse_aggregate_neighbor_couplings_PRECISION_vectorized( complex_PRECISION *eta1, complex_PRECISION *eta2,
       complex_PRECISION *phi, const int mu, schwarz_PRECISION_struct *s, level_struct *l,
       int site );  
+
+  void coarse_aggregate_block_diagonal_PRECISION_vectorized( complex_PRECISION *eta1, complex_PRECISION *eta2,
+      complex_PRECISION *phi, schwarz_PRECISION_struct *s, level_struct *l,
+      int site);  
   
   
   static inline void coarse_hopp_PRECISION_vectorized( vector_PRECISION eta, vector_PRECISION phi,

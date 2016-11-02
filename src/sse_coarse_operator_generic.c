@@ -37,6 +37,7 @@ void coarse_operator_PRECISION_setup_vectorized( complex_PRECISION *operator, le
   int mu, n = l->num_eig_vect, j, num_aggregates = l->is_PRECISION.num_agg,
       aggregate_sites = l->num_inner_lattice_sites / num_aggregates,
       clover_site_size = (l->next_level->num_lattice_site_var*(l->next_level->num_lattice_site_var+1))/2,
+      block_site_size = (l->next_level->num_parent_eig_vect*(l->next_level->num_parent_eig_vect+1)),
       D_link_size = 4*l->num_eig_vect*l->num_eig_vect*4,  // size of links in all 4 directions
       fine_components = l->num_lattice_site_var;
 
@@ -53,6 +54,8 @@ void coarse_operator_PRECISION_setup_vectorized( complex_PRECISION *operator, le
       l->next_level->op_PRECISION.D[j+a*D_link_size] = _COMPLEX_PRECISION_ZERO;
     for ( j=0; j<clover_site_size; j++ )
       l->next_level->op_PRECISION.clover[j+a*clover_site_size] = _COMPLEX_PRECISION_ZERO;
+    for ( j=0; j<block_site_size; j++ )
+      l->next_level->op_PRECISION.odd_proj[j+a*block_site_size] = _COMPLEX_PRECISION_ZERO;
   }
 
   complex_PRECISION *mpi_buffer = NULL;
@@ -230,11 +233,11 @@ void coarse_operator_PRECISION_setup_vectorized( complex_PRECISION *operator, le
           coarse_aggregate_block_diagonal_PRECISION_vectorized( eta1+c*fine_components, eta2+c*fine_components,
               operator+c*l->vector_size, &(l->s_PRECISION), l, site );
       }
-      set_block_diagonal_PRECISION_vectorized( eta1, eta2, operator, l, site, n, tmp );
+      set_coarse_block_diagonal_PRECISION_vectorized( eta1, eta2, operator, l, site, n, tmp );
     }
 
     // aggregate is done, finalize
-    set_block_diagonal_PRECISION_vectorized_finalize( l, a*aggregate_sites, n, tmp );
+    set_coarse_block_diagonal_PRECISION_vectorized_finalize( l, a*aggregate_sites, n, tmp );
 
   }
 
@@ -385,6 +388,12 @@ void set_coarse_self_coupling_PRECISION_vectorized( complex_PRECISION *spin_0_1,
   sse_set_coarse_self_coupling_PRECISION( spin_0_1, spin_2_3, V, l, site, n_rhs, tmp );
 }
 
+void set_coarse_block_diagonal_PRECISION_vectorized( complex_PRECISION *spin_0_1, complex_PRECISION *spin_2_3,
+    complex_PRECISION *V, level_struct *l, int site, const int n_rhs, complex_PRECISION *tmp ) {
+
+  sse_set_coarse_block_diagonal_PRECISION( spin_0_1, spin_2_3, V, l, site, n_rhs, tmp );
+}
+
 
 void set_coarse_self_coupling_PRECISION_vectorized_finalize( level_struct *l, int site, const int n_rhs, complex_PRECISION *tmp ) {
 
@@ -496,6 +505,45 @@ void set_coarse_neighbor_coupling_PRECISION_vectorized_finalize( const int mu, l
   }
 }
 
+void set_coarse_block_diagonal_PRECISION_vectorized_finalize( level_struct *l, int site, const int n_rhs, complex_PRECISION *tmp ) {
+
+  int k, k1, k2, num_aggregates = l->is_PRECISION.num_agg,
+      num_eig_vect = l->next_level->num_parent_eig_vect,
+      aggregate_size = l->inner_vector_size / num_aggregates,
+      block_site_size = (l->next_level->num_parent_eig_vect*(l->next_level->num_parent_eig_vect+1));
+  int t1, t2;
+
+  config_PRECISION block_pt, block = l->next_level->op_PRECISION.odd_proj;
+
+  // just an abbreviation
+  int component_offset = OPERATOR_COMPONENT_OFFSET_PRECISION;
+  int fine_components = l->num_lattice_site_var;
+
+  int aggregate = (fine_components*site)/aggregate_size;
+  block_pt = block + aggregate*block_site_size;
+
+  // U(x) = [ A 0      , A=A*, D=D*
+  //          0 D ]
+  // storage order: upper triangle of A, upper triangle of D, B, columnwise
+  // diagonal coupling
+  for ( int n=0; n<n_rhs; n++ ) {
+
+    // index k used for vectorization
+    for ( k=0; k<=n; k++ ) {
+
+      k1 = (n*(n+1))/2;
+      k2 = (n*(n+1))/2+(num_eig_vect*(num_eig_vect+1))/2;
+      t1 = (n+0*num_eig_vect)*component_offset;
+      t2 = (n+1*num_eig_vect)*component_offset;
+
+      // A
+      block_pt[ k1+k ] += ((float *)(tmp+t1))[k] + I * ((float *)(tmp+t1)+component_offset)[k];
+
+      // D
+      block_pt[ k2+k ] += ((float *)(tmp+t2))[k] + I * ((float *)(tmp+t2)+component_offset)[k];
+    }
+  }
+}
 
 void copy_coarse_operator_to_vectorized_layout_PRECISION( config_PRECISION D,                                              
                                                           OPERATOR_TYPE_PRECISION *D_vectorized, 
@@ -830,6 +878,17 @@ void coarse_aggregate_self_couplings_PRECISION_vectorized( complex_PRECISION *et
   }
 }
 
+void coarse_aggregate_block_diagonal_PRECISION_vectorized( complex_PRECISION *eta1, complex_PRECISION *eta2, 
+                                                           complex_PRECISION *phi, schwarz_PRECISION_struct *s,
+                                                           level_struct *l, int site ) {
+
+  int offset = SIMD_LENGTH_PRECISION;
+  int site_offset = l->num_lattice_site_var*offset;
+  int n = l->num_parent_eig_vect;
+  int block_offset = (n*(n+1))*site;
+ 
+  sse_coarse_aggregate_block_diagonal_PRECISION( eta1, eta2, phi+site_offset*site, s->op.odd_proj+block_offset, offset, l );
+}
 
 void coarse_aggregate_neighbor_couplings_PRECISION_vectorized( complex_PRECISION *eta1, complex_PRECISION *eta2, 
                                                                complex_PRECISION *phi, const int mu,
