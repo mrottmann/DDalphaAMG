@@ -275,12 +275,12 @@ int fgmres_PRECISION( gmres_PRECISION_struct *p, level_struct *l, struct Thread 
     END_MASTER(threading)
     SYNC_MASTER_TO_ALL(threading)
     
-    if( ol == 0  && p->initial_guess_zero ) {
+    if ( ol == 0  && p->initial_guess_zero ) {
       norm_r0 = creal(p->gamma[0]);
-    } else {
+    } else if ( ol == 0 ) {
       norm_r0 = global_norm_PRECISION( p->b, p->v_start, p->v_end, l, threading );
       if( l->depth == 0 )
-        printf0("| initial guess / restart relative residual:  %le |\n", creal(gamma0)/norm_r0);
+        printf0("| initial guess relative residual:            %le |\n", creal(gamma0)/norm_r0);
     }        
     
     vector_PRECISION_real_scale( p->V[0], p->r, 1/p->gamma[0], start, end, l ); // v_0 = r / gamma_0

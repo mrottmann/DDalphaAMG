@@ -299,7 +299,7 @@ void method_setup( vector_double *V, level_struct *l, struct Thread *threading )
         }
 #ifdef HAVE_TM
         if( g.mu!=0. && g.mu_factor[i]!=1 )
-          printf0("|                      mu: %+9.6lf                       |\n", g.mu * g.mu_factor[i]);
+          printf0("|                      mu: %+9.6lf                       |\n", g.mu * g.mu_factor[i] );
         if( g.mu_odd_shift!=0. && g.mu_factor[i]!=1 )
           printf0("|         mu on odd sites: %+9.6lf                       |\n", (g.mu + g.mu_odd_shift) * g.mu_factor[i] );
         if( g.mu_even_shift!=0. && g.mu_factor[i]!=1 )
@@ -307,11 +307,11 @@ void method_setup( vector_double *V, level_struct *l, struct Thread *threading )
 #endif
 #ifdef HAVE_TM1p1
         if( g.epsbar!=0. && g.epsbar_factor[i]!=1 )
-          printf0("|                 epsbar: %+9.6lf                       |\n", g.epsbar);
+          printf0("|                 epsbar: %+9.6lf                       |\n", g.epsbar * g.epsbar_factor[i] );
         if(g.epsbar_ig5_odd_shift!=0. && g.epsbar_factor[i]!=1)
-          printf0("|  ig5 epsbar on odd sites: %+9.6lf                     |\n", g.epsbar + g.epsbar_ig5_odd_shift );
+          printf0("|  ig5 epsbar on odd sites: %+9.6lf                     |\n", (g.epsbar + g.epsbar_ig5_odd_shift) * g.epsbar_factor[i] );
         if(g.epsbar_ig5_even_shift!=0. && g.epsbar_factor[i]!=1)
-          printf0("| ig5 epsbar on even sites: %+9.6lf                     |\n", g.epsbar + g.epsbar_ig5_even_shift );
+          printf0("| ig5 epsbar on even sites: %+9.6lf                     |\n", (g.epsbar + g.epsbar_ig5_even_shift) *g.epsbar_factor[i] );
 #endif
       }
     }

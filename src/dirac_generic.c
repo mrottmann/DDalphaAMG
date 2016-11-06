@@ -149,10 +149,10 @@ void clover_PRECISION( vector_PRECISION eta, vector_PRECISION phi, operator_PREC
        ( g.epsbar != 0 || g.epsbar_ig5_odd_shift != 0 || g.epsbar_ig5_odd_shift != 0 ) )
     while ( leta < leta_end ) { 
       lphi += 6;
-      FOR6( *leta += (*lphi)*((*eps_term)); leta++; lphi++; eps_term++; )
+      FOR6( *leta += (*lphi)*(*eps_term); leta++; lphi++; eps_term++; )
       lphi -= 12;
       eps_term -= 6;
-      FOR6( *leta += (*lphi)*((*eps_term)); leta++; lphi++; eps_term++; )
+      FOR6( *leta += (*lphi)*(*eps_term); leta++; lphi++; eps_term++; )
       lphi += 6;
     }
 #endif
