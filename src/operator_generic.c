@@ -29,8 +29,11 @@ void operator_PRECISION_init( operator_PRECISION_struct *op ) {
   op->backward_neighbor_table = NULL;
   op->translation_table = NULL;
   op->D = NULL;
+  op->D_vectorized = NULL;
+  op->D_transformed_vectorized = NULL;
   op->clover = NULL;
   op->clover_oo_inv = NULL;
+  op->clover_vectorized = NULL;
   op->clover_oo_inv_vectorized = NULL;
   op->m0 = 0;
 #ifdef HAVE_TM
@@ -45,7 +48,6 @@ void operator_PRECISION_init( operator_PRECISION_struct *op ) {
   op->epsbar_ig5_even_shift = 0;
   op->epsbar_ig5_odd_shift = 0;
   op->epsbar_term = NULL;
-  op->clover_doublet = NULL;
   op->clover_doublet_oo_inv = NULL;
   op->clover_doublet_vectorized = NULL;
   op->clover_doublet_oo_inv_vectorized = NULL;
@@ -61,11 +63,6 @@ void operator_PRECISION_init( operator_PRECISION_struct *op ) {
   }
   op->c.comm = 1;
   op->buffer = NULL;
-#ifdef VECTORIZE_COARSE_OPERATOR_PRECISION
-  op->D_vectorized = NULL;
-  op->D_transformed_vectorized = NULL;
-  op->clover_vectorized = NULL;
-#endif
 }
 
 
@@ -122,26 +119,30 @@ void operator_PRECISION_alloc( operator_PRECISION_struct *op, const int type, le
     its *= (l->local_lattice[mu]+its_boundary);
   }
   
-  nls = (type==_ORDINARY)?l->num_inner_lattice_sites:2*l->num_lattice_sites-l->num_inner_lattice_sites;
+  nls = (type==_SCHWARZ) ? (2*l->num_lattice_sites-l->num_inner_lattice_sites):l->num_inner_lattice_sites;
+
   MALLOC( op->D, complex_PRECISION, coupling_site_size*nls );
   MALLOC( op->clover, complex_PRECISION, clover_site_size*l->num_inner_lattice_sites );
-#ifdef HAVE_TM
-  int tm_site_size;
-  if ( l->depth == 0 )
-    tm_site_size = 12;
-  else
-    tm_site_size = (l->num_lattice_site_var/2*(l->num_lattice_site_var/2+1));
 
-  MALLOC( op->tm_term, complex_PRECISION, tm_site_size*l->num_inner_lattice_sites );
-  MALLOC( op->odd_proj, complex_PRECISION, tm_site_size*l->num_inner_lattice_sites );
+  int block_site_size = ( l->depth == 0 ) ? 12 : (l->num_lattice_site_var/2*(l->num_lattice_site_var/2+1));
+  MALLOC( op->odd_proj, complex_PRECISION, block_site_size*l->num_inner_lattice_sites );
+#ifdef HAVE_TM
+  MALLOC( op->tm_term, complex_PRECISION, block_site_size*l->num_inner_lattice_sites );
 #endif
 #ifdef HAVE_TM1p1
-  MALLOC( op->epsbar_term, complex_PRECISION, tm_site_size*l->num_inner_lattice_sites );
+  MALLOC( op->epsbar_term, complex_PRECISION, block_site_size*l->num_inner_lattice_sites );
 #endif
+
   MALLOC( op->index_table, int, its );
-  MALLOC( op->neighbor_table, int, (l->depth==0?4:5)*l->num_inner_lattice_sites );
-  MALLOC( op->backward_neighbor_table, int, (l->depth==0?4:5)*l->num_inner_lattice_sites );
+  if ( type ==_ODDEVEN ) {
+    MALLOC( op->neighbor_table, int, 5*its );
+    MALLOC( op->backward_neighbor_table, int, 5*its );
+  } else {
+    MALLOC( op->neighbor_table, int, (l->depth==0?4:5)*l->num_inner_lattice_sites );
+    MALLOC( op->backward_neighbor_table, int, (l->depth==0?4:5)*l->num_inner_lattice_sites );
+  }
   MALLOC( op->translation_table, int, l->num_inner_lattice_sites );
+
   if ( type == _SCHWARZ && l->depth == 0 && g.odd_even ) {
 #ifndef OPTIMIZED_SELF_COUPLING_PRECISION
 
@@ -165,7 +166,9 @@ void operator_PRECISION_alloc( operator_PRECISION_struct *op, const int type, le
 
 #endif
   }  
-  operator_PRECISION_alloc_projection_buffers( op, l );
+
+  if ( type != _ODDEVEN )
+    operator_PRECISION_alloc_projection_buffers( op, l );
   
   ghost_alloc_PRECISION( 0, &(op->c), l );
   
@@ -211,18 +214,14 @@ void operator_PRECISION_free( operator_PRECISION_struct *op, const int type, lev
     its *= (l->local_lattice[mu]+its_boundary);
   }
   
-  int nls = (type==_ORDINARY)?l->num_inner_lattice_sites:2*l->num_lattice_sites-l->num_inner_lattice_sites;
+  int nls = (type==_SCHWARZ) ? (2*l->num_lattice_sites-l->num_inner_lattice_sites) : l->num_inner_lattice_sites;
   FREE( op->D, complex_PRECISION, coupling_site_size*nls );
   FREE( op->clover, complex_PRECISION, clover_site_size*l->num_inner_lattice_sites );
-#ifdef HAVE_TM
-  int tm_site_size;
-  if ( l->depth == 0 )
-    tm_site_size = 12;
-  else
-    tm_site_size = (l->num_lattice_site_var/2*(l->num_lattice_site_var/2+1));
 
-  FREE( op->tm_term, complex_PRECISION, tm_site_size*l->num_inner_lattice_sites );
-  FREE( op->odd_proj, complex_PRECISION, tm_site_size*l->num_inner_lattice_sites );
+  int block_site_size = ( l->depth == 0 ) ? 12 : (l->num_lattice_site_var/2*(l->num_lattice_site_var/2+1));
+  FREE( op->odd_proj, complex_PRECISION, block_site_size*l->num_inner_lattice_sites );
+#ifdef HAVE_TM
+  FREE( op->tm_term, complex_PRECISION, block_site_size*l->num_inner_lattice_sites );
 #endif
   if ( type == _SCHWARZ && l->depth == 0 && g.odd_even ) {
 #ifndef OPTIMIZED_SELF_COUPLING_PRECISION
@@ -249,14 +248,20 @@ void operator_PRECISION_free( operator_PRECISION_struct *op, const int type, lev
   }  
 
 #ifdef HAVE_TM1p1
-  FREE( op->epsbar_term, complex_PRECISION, tm_site_size*l->num_inner_lattice_sites );
+  FREE( op->epsbar_term, complex_PRECISION, block_site_size*l->num_inner_lattice_sites );
 #endif
   FREE( op->index_table, int, its );
-  FREE( op->neighbor_table, int, (l->depth==0?4:5)*l->num_inner_lattice_sites );
-  FREE( op->backward_neighbor_table, int, (l->depth==0?4:5)*l->num_inner_lattice_sites );
+  if ( type ==_ODDEVEN ) {
+    FREE( op->neighbor_table, int, 5*its );
+    FREE( op->backward_neighbor_table, int, 5*its );
+  } else {
+    FREE( op->neighbor_table, int, (l->depth==0?4:5)*l->num_inner_lattice_sites );
+    FREE( op->backward_neighbor_table, int, (l->depth==0?4:5)*l->num_inner_lattice_sites );
+  }
   FREE( op->translation_table, int, l->num_inner_lattice_sites );
   
-  operator_PRECISION_free_projection_buffers( op, l );
+  if ( type != _ODDEVEN )
+    operator_PRECISION_free_projection_buffers( op, l );
   
   ghost_free_PRECISION( &(op->c), l );
   
@@ -327,6 +332,13 @@ void operator_PRECISION_define( operator_PRECISION_struct *op, level_struct *l )
 
 void operator_PRECISION_set_couplings( operator_PRECISION_struct *op, level_struct *l ) {
 
+  operator_PRECISION_set_self_couplings( op, l );
+  operator_PRECISION_set_neighbor_couplings( op, l );
+
+}
+
+void operator_PRECISION_set_neighbor_couplings( operator_PRECISION_struct *op, level_struct *l ) {
+
 #ifdef OPTIMIZED_NEIGHBOR_COUPLING_float
   int i, n = 2*l->num_lattice_sites - l->num_inner_lattice_sites;
 
@@ -338,12 +350,10 @@ void operator_PRECISION_set_couplings( operator_PRECISION_struct *op, level_stru
       set_PRECISION_D_vectorized( D_vectorized+24*mu, D_transformed_vectorized+24*mu, D_pt+9*mu );
   }
 #endif
-  
-  operator_PRECISION_set_couplings_clover( op, l );
-  
+
 }
 
-void operator_PRECISION_set_couplings_clover( operator_PRECISION_struct *op, level_struct *l ) {
+void operator_PRECISION_set_self_couplings( operator_PRECISION_struct *op, level_struct *l ) {
 
 #ifdef OPTIMIZED_SELF_COUPLING_PRECISION
   int i, n = l->num_inner_lattice_sites;

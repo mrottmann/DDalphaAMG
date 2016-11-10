@@ -1202,13 +1202,13 @@ void operator_updates_PRECISION( level_struct *l, struct Thread *threading ) {
         schwarz_PRECISION_boundary_update( &(l->next_level->s_PRECISION), l->next_level );
         END_LOCKED_MASTER(threading)
         if ( g.method >= 4 && g.odd_even ) {
-          coarse_oddeven_re_setup_PRECISION( &(l->next_level->s_PRECISION.op), _REORDER, l->next_level, threading );
+          coarse_oddeven_setup_PRECISION( &(l->next_level->s_PRECISION.op), _REORDER, l->next_level, threading );
         } else {
           coarse_operator_PRECISION_set_couplings( &(l->next_level->s_PRECISION.op), l->next_level, threading );
         }
       }
       if ( !l->next_level->idle && l->next_level->level == 0 && g.odd_even ) {
-        coarse_oddeven_re_setup_PRECISION( &(l->next_level->s_PRECISION.op), _NO_REORDERING, l->next_level, threading );
+        coarse_oddeven_setup_PRECISION( &(l->next_level->s_PRECISION.op), _NO_REORDERING, l->next_level, threading );
       } else if ( !l->next_level->idle && l->next_level->level == 0 ) {
         coarse_operator_PRECISION_set_couplings( &(l->next_level->s_PRECISION.op), l->next_level, threading );
       }
@@ -1478,9 +1478,13 @@ void two_flavours_test_PRECISION( operator_PRECISION_struct *op, level_struct *l
   vector_double_define_random( vd1, 0, l->inner_vector_size, l );
   vector_double_define_random( vd2, 0, l->inner_vector_size, l );
   apply_operator_double( vd3, vd1, &(g.p), l, no_threading );
+#ifdef HAVE_TM
   vector_double_real_scale( g.op_double.tm_term, g.op_double.tm_term, -1, 0, l->inner_vector_size, l ); 
+#endif
   apply_operator_double( vd4, vd2, &(g.p), l, no_threading );
+#ifdef HAVE_TM
   vector_double_real_scale( g.op_double.tm_term, g.op_double.tm_term, -1, 0, l->inner_vector_size, l ); 
+#endif
   add_diagonal_double( vd3, vd2, g.op_double.epsbar_term, l->inner_vector_size );
   add_diagonal_double( vd4, vd1, g.op_double.epsbar_term, l->inner_vector_size );
 

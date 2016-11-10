@@ -232,9 +232,9 @@ void gathering_PRECISION_free( gathering_PRECISION_struct *gs, level_struct *l )
 void conf_PRECISION_gather( operator_PRECISION_struct *out, operator_PRECISION_struct *in, level_struct *l ) {
   
   int send_size_hopp = l->gs_PRECISION.dist_inner_lattice_sites * 4 * SQUARE( l->num_lattice_site_var ),
-      send_size_clov = l->gs_PRECISION.dist_inner_lattice_sites * ( (l->num_lattice_site_var*(l->num_lattice_site_var+1))/2 );
+    send_size_clov = l->gs_PRECISION.dist_inner_lattice_sites * ( (l->num_lattice_site_var*(l->num_lattice_site_var+1))/2 ),
+    send_size_block = l->gs_PRECISION.dist_inner_lattice_sites * ( (l->num_lattice_site_var/2*(l->num_lattice_site_var/2+1)) );
 #ifdef HAVE_TM
-  int send_size_block = l->gs_PRECISION.dist_inner_lattice_sites * ( (l->num_lattice_site_var/2*(l->num_lattice_site_var/2+1)) );
   out->mu = in->mu;
   out->mu_even_shift = in->mu_even_shift;
   out->mu_odd_shift = in->mu_odd_shift;

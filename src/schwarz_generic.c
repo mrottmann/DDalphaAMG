@@ -1247,7 +1247,7 @@ void coarse_block_PRECISION_boundary_op( vector_PRECISION eta, vector_PRECISION 
   // k: number of current block
   int *bbl = s->block_boundary_length, n = l->num_lattice_site_var;
 
-#ifdef VECTORIZE_COARSE_OPERATOR_PRECISION
+#ifdef OPTIMIZED_COARSE_NEIGHBOR_COUPLING_PRECISION
   int column_offset = SIMD_LENGTH_PRECISION*((2*l->num_parent_eig_vect+SIMD_LENGTH_PRECISION-1)/SIMD_LENGTH_PRECISION);
   int vectorized_link_offset = 4*l->num_parent_eig_vect*column_offset;
   
@@ -1303,7 +1303,7 @@ void n_coarse_block_PRECISION_boundary_op( vector_PRECISION eta, vector_PRECISIO
                                            int k, schwarz_PRECISION_struct *s, level_struct *l ) {
   // k: number of current block
   int *bbl = s->block_boundary_length, n = l->num_lattice_site_var;
-#ifdef VECTORIZE_COARSE_OPERATOR_PRECISION
+#ifdef OPTIMIZED_COARSE_NEIGHBOR_COUPLING_PRECISION
   int column_offset = SIMD_LENGTH_PRECISION*((2*l->num_parent_eig_vect+SIMD_LENGTH_PRECISION-1)/SIMD_LENGTH_PRECISION);
   int vectorized_link_offset = 2*l->num_parent_eig_vect*column_offset;
   

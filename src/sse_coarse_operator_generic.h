@@ -47,7 +47,13 @@
       OPERATOR_TYPE_PRECISION *D_vectorized, int num_aggregates, int num_eig_vect);
   void copy_coarse_operator_clover_to_vectorized_layout_PRECISION(config_PRECISION clover,
       OPERATOR_TYPE_PRECISION *clover_vectorized, int num_aggregates, int num_eig_vect);
+  void copy_coarse_operator_clover_to_doublet_vectorized_layout_PRECISION(config_PRECISION clover,
+      OPERATOR_TYPE_PRECISION *clover_vectorized, int num_aggregates, int num_eig_vect);
   void add_tm_term_to_vectorized_layout_PRECISION(config_PRECISION tm_term,
+      OPERATOR_TYPE_PRECISION *clover_vectorized, int num_aggregates, int num_eig_vect);
+  void add_tm_term_to_doublet_vectorized_layout_PRECISION(config_PRECISION tm_term,
+      OPERATOR_TYPE_PRECISION *clover_vectorized, int num_aggregates, int num_eig_vect);
+  void add_epsbar_term_to_doublet_vectorized_layout_PRECISION(config_PRECISION eps_term,
       OPERATOR_TYPE_PRECISION *clover_vectorized, int num_aggregates, int num_eig_vect);
     
   void coarse_spinwise_site_self_couplings_PRECISION_vectorized(
@@ -69,25 +75,29 @@
   
   static inline void coarse_hopp_PRECISION_vectorized( vector_PRECISION eta, vector_PRECISION phi,
       OPERATOR_TYPE_PRECISION *D, level_struct *l ) {
-#ifdef VECTORIZE_COARSE_OPERATOR_PRECISION
+#ifdef OPTIMIZED_COARSE_NEIGHBOR_COUPLING_PRECISION
     int lda = SIMD_LENGTH_PRECISION*((2*l->num_parent_eig_vect+SIMD_LENGTH_PRECISION-1)/SIMD_LENGTH_PRECISION);
     cgenmv(2*l->num_parent_eig_vect, D, lda, (float *)phi, (float *)eta);
 #endif
   }
   static inline void coarse_n_hopp_PRECISION_vectorized( vector_PRECISION eta, vector_PRECISION phi,
       OPERATOR_TYPE_PRECISION *D, level_struct *l ) {
-#ifdef VECTORIZE_COARSE_OPERATOR_PRECISION
+#ifdef OPTIMIZED_COARSE_NEIGHBOR_COUPLING_PRECISION
     int lda = SIMD_LENGTH_PRECISION*((l->num_lattice_site_var+SIMD_LENGTH_PRECISION-1)/SIMD_LENGTH_PRECISION);
     cgemv(l->num_lattice_site_var, D, lda, (float *)phi, (float *)eta);
 #endif
   }
 
   static inline void coarse_self_couplings_PRECISION_vectorized( vector_PRECISION eta, vector_PRECISION phi, 
-                                                                 OPERATOR_TYPE_PRECISION *clover, int start, int end, level_struct *l ) {
-#ifdef VECTORIZE_COARSE_OPERATOR_PRECISION
+                                                                 operator_PRECISION_struct *op, int start, int end, level_struct *l ) {
+#ifdef OPTIMIZED_COARSE_SELF_COUPLING_PRECISION
     int site_size = l->num_lattice_site_var;
     int lda = SIMD_LENGTH_PRECISION*((site_size+SIMD_LENGTH_PRECISION-1)/SIMD_LENGTH_PRECISION);
-
+#ifdef HAVE_TM1p1
+    OPERATOR_TYPE_PRECISION *clover = (g.n_flavours == 2) ? op->clover_doublet_vectorized:op->clover_vectorized;
+#else
+    OPERATOR_TYPE_PRECISION *clover = op->clover_vectorized;
+#endif
     for(int i=start; i<end; i++) {
       for(int j=0; j<site_size; j++)
         eta[i*site_size+j] = 0.0;
@@ -95,7 +105,6 @@
     }
 #endif
   }
-  
 
   static inline void coarse_spinwise_hopp_PRECISION_vectorized( complex_PRECISION *eta1, complex_PRECISION *eta2,
       complex_PRECISION *phi, config_PRECISION D, int elements, level_struct *l ) {
@@ -142,7 +151,6 @@
     }
 #endif
   }  
-  
   
   static inline void coarse_spinwise_n_hopp_PRECISION_vectorized( complex_PRECISION *eta1, complex_PRECISION *eta2,
       complex_PRECISION *phi, config_PRECISION D, int elements, level_struct *l ) {

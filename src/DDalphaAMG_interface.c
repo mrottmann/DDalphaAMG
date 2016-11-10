@@ -360,6 +360,7 @@ void DDalphaAMG_change_mu_sign( DDalphaAMG_status *mg_status ) {
   mg_status->success = 0;
   mg_status->info = 0;  
   
+#ifdef HAVE_TM
   g.mu *= -1;
   g.mu_even_shift *= -1;
   g.mu_odd_shift *= -1;
@@ -374,53 +375,19 @@ void DDalphaAMG_change_mu_sign( DDalphaAMG_status *mg_status ) {
       tm_term_update( g.mu, &l, threading[omp_get_thread_num()] );
       finalize_operator_update( &l, threading[omp_get_thread_num()] );
     }
+  mg_status->info = g.mu;
+#else
+  warning0("DDalphaAMG_change_mu_sign called without the flag HAVE_TM enabled. Doing nothing.\n");
+  mg_status->info = 0;
+#endif
+
   t1 = MPI_Wtime();
   
   mg_status->success = 1;// 1: OK, 2: re_setup done
   mg_status->time = t1-t0;
-  mg_status->info = g.mu;
   mg_status->coarse_time = g.coarse_time;
   
 }
-
-void DDalphaAMG_change_epsbar_shift_sign( DDalphaAMG_status *mg_status ) {
-  
-  double t0, t1;
-  t0 = MPI_Wtime();
-  g.coarse_time = 0;
-  g.iter_count = 0;
-  g.coarse_iter_count = 0;
-  mg_status->success = 0;
-  mg_status->info = 0;  
-  
-  if ( g.epsbar_ig5_even_shift !=0 || g.epsbar_ig5_odd_shift !=0 ) {
-    g.epsbar_ig5_even_shift *= -1;
-    g.epsbar_ig5_odd_shift *= -1;
-
-    if (g.conf_flag && !g.setup_flag ) {
-      
-      THREADED(threading[0]->n_core) {
-        tm_term_double_setup( g.mu, g.mu_even_shift, g.mu_odd_shift, &(g.op_double),
-                              &l, threading[omp_get_thread_num()]);
-        epsbar_term_double_setup( g.epsbar, g.epsbar_ig5_even_shift, g.epsbar_ig5_odd_shift, &(g.op_double),
-                                  &l, threading[omp_get_thread_num()]);
-      }
-    } else if (g.conf_flag && g.setup_flag )
-      THREADED(threading[0]->n_core) {
-        tm_term_update( g.mu, &l, threading[omp_get_thread_num()] );
-        epsbar_term_update( &l, threading[omp_get_thread_num()] );
-        finalize_operator_update( &l, threading[omp_get_thread_num()] );
-      }
-  }
-  t1 = MPI_Wtime();
-  
-  mg_status->success = 1;// 1: OK, 2: re_setup done
-  mg_status->time = t1-t0;
-  mg_status->info = g.mu;
-  mg_status->coarse_time = g.coarse_time;
-  
-}
-
 
 void DDalphaAMG_set_configuration( double *gauge_field, DDalphaAMG_status *mg_status ) {
   
@@ -604,6 +571,68 @@ void DDalphaAMG_update_setup( int iterations, DDalphaAMG_status * mg_status ) {
   }
 }
 
+static inline void vector_copy( vector_double vector_out, vector_double vector_in )
+{
+  THREADED(threading[0]->n_core) {
+    int start = threading[omp_get_thread_num()]->start_index[0], 
+      end = threading[omp_get_thread_num()]->end_index[0];
+    vector_double_copy( vector_out, vector_in, start, end, &l );
+  }  
+}
+
+static inline void solver( )
+{
+  THREADED(threading[0]->n_core)
+    if ( g.method == -1 ) {
+      cgn_double( &(g.p), &l, threading[omp_get_thread_num()] );
+    } else if ( g.mixed_precision == 2 ) {
+      fgmres_MP( &(g.p_MP), &l, threading[omp_get_thread_num()] );
+    } else {
+      fgmres_double( &(g.p), &l, threading[omp_get_thread_num()] );
+    }
+}
+
+static inline void correct_guess( vector_double guess, vector_double solution, vector_double solution2,
+                                  double  even_dshift, double odd_dshift )
+{
+  // guess = D^{-1}*rhs - i*dshift*D^{-2}*rhs 
+  THREADED(threading[0]->n_core) {
+    int start = threading[omp_get_thread_num()]->start_index[0], 
+      end = threading[omp_get_thread_num()]->end_index[0];
+    if( odd_dshift == 0 || even_dshift == 0 || even_dshift == odd_dshift ) {
+      double dshift = ( odd_dshift == 0 ) ? even_dshift:odd_dshift;
+      printf0("correcting with dshift %le\n", dshift);
+      vector_double_scale( guess, solution2, -I*dshift, g.p.v_start, g.p.v_end, &l );
+      vector_double_plus( guess, guess, solution, start, end, &l );
+    } else
+      vector_double_copy( guess, solution, start, end, &l );
+  }  
+}
+
+static inline change_epsbar_shift_sign( ) {
+  
+#ifdef HAVE_TM1p1  
+  if ( g.epsbar_ig5_even_shift !=0 || g.epsbar_ig5_odd_shift !=0 ) {
+    g.epsbar_ig5_even_shift *= -1;
+    g.epsbar_ig5_odd_shift *= -1;
+
+    if (g.conf_flag && !g.setup_flag ) {
+      
+      THREADED(threading[0]->n_core) {
+        epsbar_term_double_setup( g.epsbar, g.epsbar_ig5_even_shift, g.epsbar_ig5_odd_shift, &(g.op_double),
+                                  &l, threading[omp_get_thread_num()]);
+      }
+    } else if (g.conf_flag && g.setup_flag )
+      THREADED(threading[0]->n_core) {
+        epsbar_term_update( &l, threading[omp_get_thread_num()] );
+        finalize_operator_update( &l, threading[omp_get_thread_num()] );
+      }
+  }
+#else
+  warning0("change_epsbar_shift_sign called without the flag HAVE_TM1p1 enabled. Doing nothing.\n");
+#endif
+}
+
 enum {_SOLVE, _SOLVE_SQ, _SOLVE_SQ_ODD, _SOLVE_SQ_EVEN, _PRECOND, _OPERATOR};
 static inline void DDalphaAMG_driver( double *vector1_out, double *vector1_in, double *vector2_out, double *vector2_in, double tol, DDalphaAMG_status *mg_status, int _TYPE ) {
   
@@ -739,18 +768,11 @@ static inline void DDalphaAMG_driver( double *vector1_out, double *vector1_in, d
   switch(_TYPE) {
     
   case _SOLVE :
-    THREADED(threading[0]->n_core)
-    if ( g.method == -1 ) {
-      cgn_double( &(g.p), &l, threading[omp_get_thread_num()] );
-    } else if ( g.mixed_precision == 2 ) {
-      fgmres_MP( &(g.p_MP), &l, threading[omp_get_thread_num()] );
-    } else {
-      fgmres_double( &(g.p), &l, threading[omp_get_thread_num()] );
-    }
+    solver( );
     break;
 
   case _SOLVE_SQ :
-    THREADED(threading[0]->n_core) {
+    THREADED(threading[0]->n_core)
 #ifdef HAVE_TM1p1
       if(g.n_flavours==2) 
         // sol = (D_h^{-1})*g5*tau1*(D_h^{-1})*g5*tau1*rhs
@@ -759,43 +781,32 @@ static inline void DDalphaAMG_driver( double *vector1_out, double *vector1_in, d
 #endif
         // sol = (D_d^{-1})*g5*(D_u^{-1})*g5*rhs
         gamma5_double( rhs, rhs, &l, threading[omp_get_thread_num()] );
-      if ( g.method == -1 ) {
-        cgn_double( &(g.p), &l, threading[omp_get_thread_num()] );
-      } else if ( g.mixed_precision == 2 ) {
-        fgmres_MP( &(g.p_MP), &l, threading[omp_get_thread_num()] );
-      } else {
-        fgmres_double( &(g.p), &l, threading[omp_get_thread_num()] );
-      }
+    
+    solver( );
       
+    THREADED(threading[0]->n_core)
 #ifdef HAVE_TM1p1
       if(g.n_flavours==2) 
         tau1_gamma5_double(rhs, sol, &l, threading[omp_get_thread_num()] );
       else
 #endif
         gamma5_double(rhs, sol, &l, threading[omp_get_thread_num()] );
-    }
+ 
 #ifdef HAVE_TM1p1
     if(g.n_flavours==2) 
-      DDalphaAMG_change_epsbar_shift_sign( &tmp_status );
+      change_epsbar_shift_sign( );
     else
 #endif
       DDalphaAMG_change_mu_sign( &tmp_status );
-    THREADED(threading[0]->n_core) {
-      if ( g.method == -1 ) {
-        cgn_double( &(g.p), &l, threading[omp_get_thread_num()] );
-      } else if ( g.mixed_precision == 2 ) {
-        fgmres_MP( &(g.p_MP), &l, threading[omp_get_thread_num()] );
-      } else {
-        fgmres_double( &(g.p), &l, threading[omp_get_thread_num()] );
-      }
-    }
+
+    solver( );
+
     // DDalphaAMG_change_mu_sign( &tmp_status );
     warning0("sign of mu changed during the inversion of squared operator\n");
     break;
     
   case _SOLVE_SQ_ODD :    
     THREADED(threading[0]->n_core)
-    {
 #ifdef HAVE_TM1p1
       if(g.n_flavours==2) 
         // sol = (D_h^{-1})*g5*tau1*(D_h^{-1})*g5*tau1*rhs
@@ -804,42 +815,32 @@ static inline void DDalphaAMG_driver( double *vector1_out, double *vector1_in, d
 #endif
         // sol = (D_d^{-1})*g5*(D_u^{-1})*g5*rhs
         gamma5_set_even_to_zero_double(rhs, rhs, &l, threading[omp_get_thread_num()]);
-      if ( g.method == -1 ) {
-        cgn_double( &(g.p), &l, threading[omp_get_thread_num()] );
-      } else if ( g.mixed_precision == 2 ) {
-        fgmres_MP( &(g.p_MP), &l, threading[omp_get_thread_num()] );
-      } else {
-        fgmres_double( &(g.p), &l, threading[omp_get_thread_num()] );
-      }
+
+    solver( );
+
+    THREADED(threading[0]->n_core)
 #ifdef HAVE_TM1p1
       if(g.n_flavours==2) 
         tau1_gamma5_set_even_to_zero_double(rhs, sol, &l, threading[omp_get_thread_num()]);
       else
 #endif
         gamma5_set_even_to_zero_double(rhs, sol, &l, threading[omp_get_thread_num()]);
-    }
+ 
 #ifdef HAVE_TM1p1
     if(g.n_flavours==2) 
-      DDalphaAMG_change_epsbar_shift_sign( &tmp_status );
+      change_epsbar_shift_sign( );
     else
 #endif
       DDalphaAMG_change_mu_sign( &tmp_status );
-    THREADED(threading[0]->n_core) {
-      if ( g.method == -1 ) {
-        cgn_double( &(g.p), &l, threading[omp_get_thread_num()] );
-      } else if ( g.mixed_precision == 2 ) {
-        fgmres_MP( &(g.p_MP), &l, threading[omp_get_thread_num()] );
-      } else {
-        fgmres_double( &(g.p), &l, threading[omp_get_thread_num()] );
-      }
-    }
+
+    solver( );
+
     // DDalphaAMG_change_mu_sign( &tmp_status );
     warning0("sign of mu changed during the inversion of squared operator\n");
     break;
     
   case _SOLVE_SQ_EVEN :    
     THREADED(threading[0]->n_core)
-    {
 #ifdef HAVE_TM1p1
       if(g.n_flavours==2) 
         // sol = (D_h^{-1})*g5*tau1*(D_h^{-1})*g5*tau1*rhs
@@ -848,35 +849,26 @@ static inline void DDalphaAMG_driver( double *vector1_out, double *vector1_in, d
 #endif
         // sol = (D_d^{-1})*g5*(D_u^{-1})*g5*rhs
         gamma5_set_odd_to_zero_double(rhs, rhs, &l, threading[omp_get_thread_num()]);
-      if ( g.method == -1 ) {
-        cgn_double( &(g.p), &l, threading[omp_get_thread_num()] );
-      } else if ( g.mixed_precision == 2 ) {
-        fgmres_MP( &(g.p_MP), &l, threading[omp_get_thread_num()] );
-      } else {
-        fgmres_double( &(g.p), &l, threading[omp_get_thread_num()] );
-      }
+
+    solver( );
+
+    THREADED(threading[0]->n_core)
 #ifdef HAVE_TM1p1
       if(g.n_flavours==2) 
         tau1_gamma5_set_odd_to_zero_double(rhs, sol, &l, threading[omp_get_thread_num()]);
       else
 #endif
         gamma5_set_odd_to_zero_double(rhs, sol, &l, threading[omp_get_thread_num()]);
-    }
+
 #ifdef HAVE_TM1p1
     if(g.n_flavours==2) 
-      DDalphaAMG_change_epsbar_shift_sign( &tmp_status );
+      change_epsbar_shift_sign( );
     else
 #endif
       DDalphaAMG_change_mu_sign( &tmp_status );
-    THREADED(threading[0]->n_core) {
-      if ( g.method == -1 ) {
-        cgn_double( &(g.p), &l, threading[omp_get_thread_num()] );
-      } else if ( g.mixed_precision == 2 ) {
-        fgmres_MP( &(g.p_MP), &l, threading[omp_get_thread_num()] );
-      } else {
-        fgmres_double( &(g.p), &l, threading[omp_get_thread_num()] );
-      }
-    }
+
+    solver( );
+
     // DDalphaAMG_change_mu_sign( &tmp_status );
     warning0("sign of mu changed during the inversion of squared operator\n");
     break;
@@ -976,45 +968,6 @@ static inline void DDalphaAMG_driver( double *vector1_out, double *vector1_in, d
   mg_status->coarse_iter_count = g.coarse_iter_count;
   
 }
-
-static inline void vector_copy( vector_double vector_out, vector_double vector_in )
-{
-  THREADED(threading[0]->n_core) {
-    int start = threading[omp_get_thread_num()]->start_index[0], 
-      end = threading[omp_get_thread_num()]->end_index[0];
-    vector_double_copy( vector_out, vector_in, start, end, &l );
-  }  
-}
-
-static inline void solver( )
-{
-  THREADED(threading[0]->n_core)
-    if ( g.method == -1 ) {
-      cgn_double( &(g.p), &l, threading[omp_get_thread_num()] );
-    } else if ( g.mixed_precision == 2 ) {
-      fgmres_MP( &(g.p_MP), &l, threading[omp_get_thread_num()] );
-    } else {
-      fgmres_double( &(g.p), &l, threading[omp_get_thread_num()] );
-    }
-}
-
-static inline void correct_guess( vector_double guess, vector_double solution, vector_double solution2,
-                                  double  even_dshift, double odd_dshift )
-{
-  // guess = D^{-1}*rhs - i*dshift*D^{-2}*rhs 
-  THREADED(threading[0]->n_core) {
-    int start = threading[omp_get_thread_num()]->start_index[0], 
-      end = threading[omp_get_thread_num()]->end_index[0];
-    if( odd_dshift == 0 || even_dshift == 0 || even_dshift == odd_dshift ) {
-      double dshift = ( odd_dshift == 0 ) ? even_dshift:odd_dshift;
-      printf0("correcting with dshift %le\n", dshift);
-      vector_double_scale( guess, solution2, -I*dshift, g.p.v_start, g.p.v_end, &l );
-      vector_double_plus( guess, guess, solution, start, end, &l );
-    } else
-      vector_double_copy( guess, solution, start, end, &l );
-  }  
-}
-
 
 static inline void DDalphaAMG_ms_driver( double **vector1_out, double *vector1_in, 
                                          double **vector2_out, double *vector2_in, 
@@ -1179,6 +1132,7 @@ static inline void DDalphaAMG_ms_driver( double **vector1_out, double *vector1_i
       } else
 #endif
         {
+#ifdef HAVE_TM
           if( g.mu_even_shift != even_shifts[n] || g.mu_odd_shift != odd_shifts[n] ) {
             g.mu_even_shift = even_shifts[n];
             g.mu_odd_shift  =  odd_shifts[n];
@@ -1187,6 +1141,7 @@ static inline void DDalphaAMG_ms_driver( double **vector1_out, double *vector1_i
             THREADED(threading[0]->n_core)
               finalize_operator_update( &l, threading[omp_get_thread_num()]);
           }
+#endif
         }
     }
 
@@ -1236,7 +1191,7 @@ static inline void DDalphaAMG_ms_driver( double **vector1_out, double *vector1_i
 
 #ifdef HAVE_TM1p1
       if(g.n_flavours==2) 
-        DDalphaAMG_change_epsbar_shift_sign( &tmp_status );
+        change_epsbar_shift_sign( );
       else
 #endif
         DDalphaAMG_change_mu_sign( &tmp_status );
@@ -1286,7 +1241,7 @@ static inline void DDalphaAMG_ms_driver( double **vector1_out, double *vector1_i
 
 #ifdef HAVE_TM1p1
       if(g.n_flavours==2) 
-        DDalphaAMG_change_epsbar_shift_sign( &tmp_status );
+        change_epsbar_shift_sign( );
       else
 #endif
         DDalphaAMG_change_mu_sign( &tmp_status );
@@ -1337,7 +1292,7 @@ static inline void DDalphaAMG_ms_driver( double **vector1_out, double *vector1_i
        
 #ifdef HAVE_TM1p1
       if(g.n_flavours==2) 
-        DDalphaAMG_change_epsbar_shift_sign( &tmp_status );
+        change_epsbar_shift_sign( );
       else
 #endif
         DDalphaAMG_change_mu_sign( &tmp_status );
@@ -1769,7 +1724,11 @@ void DDalphaAMG_get_parameters( DDalphaAMG_parameters *mg_params ){
     if( i<g.num_levels-1 )
       mg_params->mg_basis_vectors[i] = g.num_eig_vect[i];
     mg_params->setup_iterations[i] = g.setup_iter[i];
+#ifdef HAVE_TM
     mg_params->mu_factor[i] = g.mu_factor[i];
+#else
+    mg_params->mu_factor[i] = 1;
+#endif
 #ifdef HAVE_TM1p1
     mg_params->epsbar_factor[i] = g.epsbar_factor[i];
 #else

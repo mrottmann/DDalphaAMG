@@ -38,21 +38,21 @@
   #define EPS_float 1E-6
   #define EPS_double 1E-14
 
-  #define HAVE_TM // flag for enable twisted mass
-  #define HAVE_TM1p1 // flag for enable doublet for twisted mass
+  #define HAVE_TM      // flag for enable twisted mass
+  #define HAVE_TM1p1   // flag for enable doublet for twisted mass
 
   #undef INIT_ONE_PREC // flag undef for enabling additional features in the lib
   
-  #define FOR2( e ) { e e }
-  #define FOR3( e ) { e e e }
-  #define FOR4( e ) { e e e e }
-  #define FOR10( e ) { e e e e e  e e e e e }
-  #define FOR20( e ) { e e e e e  e e e e e  e e e e e  e e e e e  }
-  #define FOR40( e ) { e e e e e  e e e e e  e e e e e  e e e e e  e e e e e  e e e e e  e e e e e  e e e e e }
+  #define FOR2( e )  { e e }
+  #define FOR3( e )  { e e e }
+  #define FOR4( e )  { e e e e }
   #define FOR6( e )  { e e e  e e e }
+  #define FOR10( e ) { e e e e e  e e e e e }
   #define FOR12( e ) { e e e  e e e  e e e  e e e }
-  #define FOR24( e ) { e e e  e e e  e e e  e e e  e e e  e e e  e e e  e e e }
+  #define FOR20( e ) { FOR10( e ) FOR10( e )  }
+  #define FOR24( e ) { FOR12( e ) FOR12( e ) }
   #define FOR36( e ) { FOR12( e ) FOR12( e ) FOR12( e ) }
+  #define FOR40( e ) { FOR20( e ) FOR20( e ) }
   #define FOR42( e ) { FOR36( e ) FOR6( e ) }
   
   #define SQUARE( e ) (e)*(e)
@@ -81,8 +81,8 @@
   #define cpow_float cpowf
   #define pow_double pow
   #define pow_float powf
-  #define abs_double abs
-  #define abs_float fabs
+  #define abs_double fabs
+  #define abs_float fabsf
   
 #ifdef SSE
   #define MALLOC( variable, kind, length ) do{ if ( variable != NULL ) { \
@@ -189,7 +189,7 @@
   enum { _NO_DEFAULT_SET, _DEFAULT_SET };
   enum { _NO_REORDERING, _REORDER };
   enum { _ADD, _COPY };
-  enum { _ORDINARY, _SCHWARZ };
+  enum { _ORDINARY, _SCHWARZ, _ODDEVEN };
   enum { _RES, _NO_RES };
   enum { _STANDARD, _LIME }; //formats
   enum { _READ, _WRITE };

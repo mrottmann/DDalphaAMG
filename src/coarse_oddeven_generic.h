@@ -23,33 +23,21 @@
   #define COARSE_ODDEVEN_PRECISION_HEADER
 
   struct Thread;
+
+  void coarse_oddeven_alloc_PRECISION( level_struct *l );
   
-#ifndef HAVE_TM  
-  void coarse_selfcoupling_LU_decomposition_PRECISION( config_PRECISION output, config_PRECISION input, level_struct *l );
-#else
-  void coarse_selfcoupling_LU_decomposition_PRECISION( const config_PRECISION output, config_PRECISION input, config_PRECISION input_anti, level_struct *l );
-#endif
-#ifdef HAVE_TM1p1
-#ifndef HAVE_TM  
-  void coarse_selfcoupling_LU_doublet_decomposition_PRECISION( config_PRECISION output, config_PRECISION input, config_PRECISION input_doublet, level_struct *l );
-#else
-  void coarse_selfcoupling_LU_doublet_decomposition_PRECISION( const config_PRECISION output, config_PRECISION input, config_PRECISION input_anti, config_PRECISION input_doublet, level_struct *l );
-#endif
-#endif
-  void coarse_perform_fwd_bwd_subs_PRECISION( vector_PRECISION x, vector_PRECISION b, config_PRECISION A, level_struct *l );
-  
-  void coarse_oddeven_setup_PRECISION( operator_PRECISION_struct *in, int reorder, level_struct *l );
-  void coarse_oddeven_re_setup_PRECISION( operator_PRECISION_struct *in, int reorder, level_struct *l, struct Thread *threading );
+  void coarse_oddeven_setup_PRECISION( operator_PRECISION_struct *in, int reorder, level_struct *l,
+                                       struct Thread *threading );
+  void coarse_oddeven_PRECISION_set_self_couplings( level_struct *l, struct Thread *threading );
+
   void coarse_oddeven_free_PRECISION( level_struct *l );
   
-  void coarse_solve_odd_even_PRECISION( gmres_PRECISION_struct *p, operator_PRECISION_struct *op, level_struct *l, struct Thread *threading );
+  void coarse_solve_odd_even_PRECISION( gmres_PRECISION_struct *p, operator_PRECISION_struct *op, level_struct *l, 
+                                        struct Thread *threading );
   void coarse_apply_schur_complement_PRECISION( vector_PRECISION out, vector_PRECISION in, operator_PRECISION_struct *op, level_struct *l, struct Thread *threading );
   void g5D_coarse_solve_odd_even_PRECISION( gmres_PRECISION_struct *p, operator_PRECISION_struct *op, level_struct *l, struct Thread *threading );
   void g5D_coarse_apply_schur_complement_PRECISION( vector_PRECISION out, vector_PRECISION in, operator_PRECISION_struct *op, level_struct *l, struct Thread *threading );
   
-  void coarse_diag_ee_PRECISION( vector_PRECISION y, vector_PRECISION x, operator_PRECISION_struct *op, level_struct *l, struct Thread *threading );
-  void coarse_diag_oo_PRECISION( vector_PRECISION y, vector_PRECISION x, operator_PRECISION_struct *op, level_struct *l, struct Thread *threading );
-  void coarse_diag_oo_inv_PRECISION( vector_PRECISION y, vector_PRECISION x, operator_PRECISION_struct *op, level_struct *l, struct Thread *threading );
   void coarse_hopping_term_PRECISION( vector_PRECISION out, vector_PRECISION in, operator_PRECISION_struct *op,
                                       const int amount, level_struct *l, struct Thread *threading );
   void coarse_n_hopping_term_PRECISION( vector_PRECISION out, vector_PRECISION in, operator_PRECISION_struct *op,

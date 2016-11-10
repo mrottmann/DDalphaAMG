@@ -665,11 +665,14 @@ void m0_update( double m0, level_struct *l, struct Thread *threading ) {
       m0_update_double( m0, &(l->op_double), l, threading );
   }
   
-  if ( g.mixed_precision )
-    m0_update_float( m0, &(l->s_float.op), l, threading );
-  else
-    m0_update_double( m0, &(l->s_double.op), l, threading );
-  
+  if ( g.mixed_precision ) {
+      m0_update_float( m0, &(l->oe_op_float), l, threading );
+      m0_update_float( m0, &(l->s_float.op), l, threading );      
+  } else {
+      m0_update_double( m0, &(l->oe_op_double), l, threading );
+      m0_update_double( m0, &(l->s_double.op), l, threading );
+  }  
+
   START_LOCKED_MASTER(threading)
   if(g.print>0) printf0("depth: %d, kappa updated to %f \n", (l->depth), 0.5/(m0 + 4.));
   END_LOCKED_MASTER(threading)
@@ -695,10 +698,13 @@ void tm_term_update( double mu, level_struct *l, struct Thread *threading ) {
       tm_term_double_setup( factor*mu, factor*even_shift, factor*odd_shift, &(l->op_double), l, threading );
   }
   
-  if ( g.mixed_precision )
-    tm_term_float_setup( factor*mu, factor*even_shift, factor*odd_shift, &(l->s_float.op), l, threading );
-  else
-    tm_term_double_setup( factor*mu, factor*even_shift, factor*odd_shift, &(l->s_double.op), l, threading );    
+  if ( g.mixed_precision ) {
+      tm_term_float_setup( factor*mu, factor*even_shift, factor*odd_shift, &(l->oe_op_float), l, threading );
+      tm_term_float_setup( factor*mu, factor*even_shift, factor*odd_shift, &(l->s_float.op), l, threading );
+  } else {
+      tm_term_double_setup( factor*mu, factor*even_shift, factor*odd_shift, &(l->oe_op_double), l, threading );   
+      tm_term_double_setup( factor*mu, factor*even_shift, factor*odd_shift, &(l->s_double.op), l, threading );   
+  }
 
   START_MASTER(threading)
   if(g.print>0) {
@@ -732,10 +738,13 @@ void epsbar_term_update( level_struct *l, struct Thread *threading ) {
       epsbar_term_double_setup( factor*epsbar, factor*even_shift, factor*odd_shift, &(l->op_double), l, threading );
   }
   
-  if ( g.mixed_precision )
-    epsbar_term_float_setup( factor*epsbar, factor*even_shift, factor*odd_shift, &(l->s_float.op), l, threading );
-  else
-    epsbar_term_double_setup( factor*epsbar, factor*even_shift, factor*odd_shift, &(l->s_double.op), l, threading );
+  if ( g.mixed_precision ) {
+      epsbar_term_float_setup( factor*epsbar, factor*even_shift, factor*odd_shift, &(l->oe_op_float),l, threading );
+      epsbar_term_float_setup( factor*epsbar, factor*even_shift, factor*odd_shift, &(l->s_float.op), l, threading );
+  } else {
+      epsbar_term_double_setup( factor*epsbar, factor*even_shift, factor*odd_shift, &(l->oe_op_double),l, threading );
+      epsbar_term_double_setup( factor*epsbar, factor*even_shift, factor*odd_shift, &(l->s_double.op), l, threading );
+  }
 
   START_MASTER(threading)
   if(g.print>0) {
@@ -757,13 +766,13 @@ void finalize_operator_update( level_struct *l, struct Thread *threading ) {
   if (l->depth == 0) {
     START_LOCKED_MASTER(threading)  
     if(l->s_double.op.clover != NULL) {
-      operator_double_set_couplings_clover(  &(l->s_double.op), l );
+      operator_double_set_self_couplings(  &(l->s_double.op), l );
       if ( g.odd_even )
         schwarz_double_oddeven_setup( &(l->s_double), l );
     }  
     
     if ( l->s_float.op.clover != NULL ) {
-      operator_float_set_couplings_clover(  &(l->s_float.op), l );
+      operator_float_set_self_couplings(  &(l->s_float.op), l );
       if ( g.odd_even )
         schwarz_float_oddeven_setup( &(l->s_float), l );
     }  
@@ -771,19 +780,15 @@ void finalize_operator_update( level_struct *l, struct Thread *threading ) {
   } else {
     SYNC_CORES(threading)
     if ( g.mixed_precision ) {
-      if ( !l->idle && g.method >= 4 && l->level > 0 && g.odd_even ) 
-        coarse_oddeven_re_setup_float( &(l->s_float.op), _REORDER, l, threading );
-      else if ( !l->idle && l->level == 0 && g.odd_even)
-        coarse_oddeven_re_setup_float( &(l->s_float.op), _NO_REORDERING, l, threading );
+      if ( !l->idle && g.odd_even && ((g.method >= 4 && l->level > 0) || l->level == 0) )
+        coarse_oddeven_float_set_self_couplings( l, threading );
       else
-        coarse_operator_float_set_couplings_clover( &(l->s_float.op), l, threading );
+        coarse_operator_float_set_self_couplings( &(l->s_float.op), l, threading );
     } else {
-      if ( !l->idle && g.method >= 4 && l->level > 0 && g.odd_even ) 
-        coarse_oddeven_re_setup_double( &(l->s_double.op), _REORDER, l, threading );
-      else if ( !l->idle && l->level == 0 && g.odd_even)
-        coarse_oddeven_re_setup_double( &(l->s_double.op), _NO_REORDERING, l, threading );
+      if ( !l->idle && g.odd_even && ((g.method >= 4 && l->level > 0) || l->level == 0) )
+        coarse_oddeven_double_set_self_couplings( l, threading );
       else
-        coarse_operator_double_set_couplings_clover( &(l->s_double.op), l, threading );
+        coarse_operator_double_set_self_couplings( &(l->s_double.op), l, threading );
     }
   }
 

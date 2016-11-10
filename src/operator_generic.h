@@ -30,7 +30,8 @@
   void operator_PRECISION_free( operator_PRECISION_struct *op, const int type, level_struct *l );
 
   void operator_PRECISION_set_couplings( operator_PRECISION_struct *op, level_struct *l );
-  void operator_PRECISION_set_couplings_clover( operator_PRECISION_struct *op, level_struct *l );
+  void operator_PRECISION_set_self_couplings( operator_PRECISION_struct *op, level_struct *l );
+  void operator_PRECISION_set_neighbor_couplings( operator_PRECISION_struct *op, level_struct *l );
   
   void operator_PRECISION_test_routine( operator_PRECISION_struct *op, level_struct *l, struct Thread *threading );
   

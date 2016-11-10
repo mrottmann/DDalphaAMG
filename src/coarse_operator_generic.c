@@ -30,26 +30,37 @@ void coarse_operator_PRECISION_alloc( level_struct *l ) {
   l->next_level->block_size = ((k/2*(k/2+1)))*nd;
   
   operator_PRECISION_alloc( &(l->next_level->op_PRECISION), _ORDINARY, l->next_level );
-}
 
+}
 
 void coarse_operator_PRECISION_free( level_struct *l ) {
   
   operator_PRECISION_free( &(l->next_level->op_PRECISION), _ORDINARY, l->next_level );
   
-#ifdef VECTORIZE_COARSE_OPERATOR_PRECISION
-  operator_PRECISION_struct *op = &(l->next_level->s_PRECISION.op);
-  if( op->D_vectorized != NULL ) {
-    int n2 = 2*l->next_level->num_lattice_sites-l->next_level->num_inner_lattice_sites, n = l->next_level->num_inner_lattice_sites;
-    int column_offset = SIMD_LENGTH_PRECISION*((l->next_level->num_parent_eig_vect*2+SIMD_LENGTH_PRECISION-1)/SIMD_LENGTH_PRECISION);
-    // 2 is for complex, 4 is for 4 directions
-    FREE_HUGEPAGES( op->D_vectorized, OPERATOR_TYPE_PRECISION, 2*4*l->next_level->num_parent_eig_vect*2*column_offset*n2 );
-    FREE_HUGEPAGES( op->D_transformed_vectorized, OPERATOR_TYPE_PRECISION, 2*4*l->next_level->num_parent_eig_vect*2*column_offset*n2 );
-    FREE_HUGEPAGES( op->clover_vectorized, OPERATOR_TYPE_PRECISION, 2*l->next_level->num_parent_eig_vect*2*column_offset*n );
-  }
-#endif
+  coarse_operator_PRECISION_free_vectorized( &(l->next_level->s_PRECISION.op), l->next_level );
 }
 
+void coarse_operator_PRECISION_free_vectorized( operator_PRECISION_struct *op, level_struct *l ) {
+
+  if( op->D_vectorized != NULL ) {
+    int n2 = 2*l->num_lattice_sites-l->num_inner_lattice_sites;
+    int column_offset = SIMD_LENGTH_PRECISION*((2*l->num_parent_eig_vect+SIMD_LENGTH_PRECISION-1)/SIMD_LENGTH_PRECISION);
+    // 2 is for complex, 4 is for 4 directions
+    FREE_HUGEPAGES( op->D_vectorized, OPERATOR_TYPE_PRECISION, 2*4*2*l->num_parent_eig_vect*column_offset*n2 );
+    FREE_HUGEPAGES( op->D_transformed_vectorized, OPERATOR_TYPE_PRECISION, 2*4*2*l->num_parent_eig_vect*column_offset*n2 );
+  }
+
+  if( op->clover_vectorized != NULL ) {
+    int n = l->num_inner_lattice_sites;
+    int column_offset = SIMD_LENGTH_PRECISION*((2*l->num_parent_eig_vect+SIMD_LENGTH_PRECISION-1)/SIMD_LENGTH_PRECISION);
+    FREE_HUGEPAGES( op->clover_vectorized, OPERATOR_TYPE_PRECISION, 2*2*l->num_parent_eig_vect*column_offset*n );
+#ifdef HAVE_TM1p1
+    int column_doublet_offset = SIMD_LENGTH_PRECISION*((4*l->num_parent_eig_vect+SIMD_LENGTH_PRECISION-1)/SIMD_LENGTH_PRECISION);
+    FREE_HUGEPAGES( l->oe_op_PRECISION.clover_doublet_vectorized, OPERATOR_TYPE_PRECISION, 2*4*l->num_parent_eig_vect*column_doublet_offset*n );
+#endif
+  }
+
+}
 
 void coarse_operator_PRECISION_setup( vector_PRECISION *V, level_struct *l ) {
   
@@ -281,7 +292,6 @@ void set_coarse_neighbor_coupling_PRECISION( vector_PRECISION spin_0_1, vector_P
   }
 }
 
-#ifndef VECTORIZE_COARSE_OPERATOR_PRECISION
 void coarse_block_operator_PRECISION( vector_PRECISION eta, vector_PRECISION phi, int start, schwarz_PRECISION_struct *s, level_struct *l, struct Thread *threading ) {
   
   START_UNTHREADED_FUNCTION(threading)
@@ -289,29 +299,19 @@ void coarse_block_operator_PRECISION( vector_PRECISION eta, vector_PRECISION phi
   int n = s->num_block_sites, *length = s->dir_length, **index = s->index,
     *ind, *neighbor = s->op.neighbor_table, m = l->num_lattice_site_var, num_eig_vect = l->num_parent_eig_vect;
   vector_PRECISION lphi = phi+start, leta = eta+start;
-  int hopp_size = 4 * SQUARE( num_eig_vect*2 );
-  config_PRECISION D_pt, D = s->op.D + (start/m)*hopp_size;
   
   // site-wise self coupling
-  int clov_size = ( (num_eig_vect*(2*num_eig_vect+1)) );
-  config_PRECISION clover = s->op.clover + (start/m)*clov_size;
-  coarse_self_couplings_PRECISION( leta, lphi, clover, n*m, l );
-
-#ifdef HAVE_TM
-  int tm_term_size = ( (num_eig_vect*(num_eig_vect+1)) );
-  config_PRECISION tm_term = s->op.tm_term + (start/m)*tm_term_size;
-  if (g.mu + g.mu_odd_shift != 0.0 || g.mu + g.mu_even_shift != 0.0 )
-    coarse_add_anti_block_diagonal_PRECISION( leta, lphi, tm_term, n*m, l );
-#endif
-  
-#ifdef HAVE_TM1p1
-  config_PRECISION epsbar_term = s->op.epsbar_term+(start/m)*tm_term_size;  
-  if ( g.n_flavours == 2 &&
-       ( s->op.epsbar != 0 || s->op.epsbar_ig5_odd_shift != 0 || s->op.epsbar_ig5_odd_shift != 0 ) )
-    coarse_add_doublet_coupling_PRECISION( leta, lphi, epsbar_term, n*m, l );
+#ifndef OPTIMIZED_COARSE_SELF_COUPLING_PRECISION
+  coarse_self_couplings_PRECISION( eta, phi, &(s->op), (start/m), (start/m)+n, l);
+#else
+  coarse_self_couplings_PRECISION_vectorized( eta, phi, &(s->op), (start/m), (start/m)+n, l );
 #endif
 
   // inner block couplings
+#ifndef OPTIMIZED_COARSE_NEIGHBOR_COUPLING_PRECISION
+  int hopp_size = 4 * SQUARE( num_eig_vect*2 );
+  config_PRECISION D_pt, D = s->op.D + (start/m)*hopp_size;
+
   for ( int mu=0; mu<4; mu++ ) {
     ind = index[mu]; // mu direction
     for ( int i=0; i<length[mu]; i++ ) {
@@ -321,10 +321,25 @@ void coarse_block_operator_PRECISION( vector_PRECISION eta, vector_PRECISION phi
       coarse_daggered_hopp_PRECISION( leta+m*j, lphi+m*k, D_pt, l );
     }
   }
+#else
+  for ( int mu=0; mu<4; mu++ ) {
+    OPERATOR_TYPE_PRECISION *Dplus = s->op.D_vectorized +
+      (start/m)*4*vectorized_link_offset + mu*vectorized_link_offset;
+    OPERATOR_TYPE_PRECISION *Dminus = s->op.D_transformed_vectorized +
+      (start/m)*4*vectorized_link_offset + mu*vectorized_link_offset;
+    ind = index[mu]; // mu direction
+    for ( int i=0; i<length[mu]; i++ ) {
+      int k = ind[i]; int j = neighbor[5*k+mu+1];
+      // hopp
+      coarse_hopp_PRECISION_vectorized( leta+m*k, lphi+m*j, Dplus + 4*vectorized_link_offset*k, l );
+      // daggered hopp
+      coarse_hopp_PRECISION_vectorized( leta+m*j, lphi+m*k, Dminus + 4*vectorized_link_offset*k, l );
+    }
+  }
+#endif
 
   END_UNTHREADED_FUNCTION(threading)
 }
-#endif
 
 
 void coarse_aggregate_self_couplings_PRECISION( vector_PRECISION eta1, vector_PRECISION eta2, vector_PRECISION phi,
@@ -375,73 +390,29 @@ void coarse_aggregate_neighbor_couplings_PRECISION( vector_PRECISION eta1, vecto
   }
 }
 
-
 void coarse_self_couplings_PRECISION( vector_PRECISION eta, vector_PRECISION phi,
-                                      config_PRECISION clover, int length, level_struct *l ) {
+                                      operator_PRECISION_struct *op, int start, int end, level_struct *l ) {
 
-  int site_var = l->num_lattice_site_var,
-      num_eig_vect = l->num_parent_eig_vect,
-      clover_step_size1 = (num_eig_vect * (num_eig_vect+1))/2,
-      clover_step_size2 = SQUARE(num_eig_vect);
-  config_PRECISION clover_pt = clover;
-  vector_PRECISION phi_pt=phi, eta_pt=eta, phi_end_pt=phi+length;
-  // U(x) = [ A B      , A=A*, D=D*, C = -B*
-  //          C D ]
-  // storage order: upper triangle of A, upper triangle of D, B, columnwise
-  // diagonal coupling
-#ifdef HAVE_TM1p1
-  if( g.n_flavours == 2 ) {
-    while ( phi_pt < phi_end_pt ) {
-      // A
-      mvp_PRECISION( eta_pt, clover_pt, phi_pt, num_eig_vect );
-      eta_pt += num_eig_vect;//1
-      phi_pt += num_eig_vect;//1
-      mvp_PRECISION( eta_pt, clover_pt, phi_pt, num_eig_vect );
-      // D
-      eta_pt += num_eig_vect;//2
-      phi_pt += num_eig_vect;//2
-      clover_pt += clover_step_size1; 
-      mvp_PRECISION( eta_pt, clover_pt, phi_pt, num_eig_vect );
-      eta_pt += num_eig_vect;//3
-      phi_pt += num_eig_vect;//3
-      mvp_PRECISION( eta_pt, clover_pt, phi_pt, num_eig_vect );
-      // C = -B*
-      eta_pt -= num_eig_vect;//2
-      phi_pt -= 3*num_eig_vect;//0
-      clover_pt += clover_step_size1;
-      nmvh_PRECISION( eta_pt, clover_pt, phi_pt, num_eig_vect );
-      eta_pt += num_eig_vect;//3
-      phi_pt += num_eig_vect;//1
-      nmvh_PRECISION( eta_pt, clover_pt, phi_pt, num_eig_vect );
-      // B
-      eta_pt -= 3*num_eig_vect;//0
-      phi_pt += num_eig_vect;//2
-      mv_PRECISION( eta_pt, clover_pt, phi_pt, num_eig_vect );
-      eta_pt += num_eig_vect;//1
-      phi_pt += num_eig_vect;//3
-      mv_PRECISION( eta_pt, clover_pt, phi_pt, num_eig_vect );
-      eta_pt += 3*num_eig_vect;//4
-      phi_pt += num_eig_vect;//4
-      clover_pt += clover_step_size2;
-    }
-  } else
+  int num_eig_vect = l->num_parent_eig_vect, 
+    vector_size = l->num_lattice_site_var,
+    clover_size = (2*num_eig_vect*num_eig_vect+num_eig_vect), 
+    block_size = (num_eig_vect*num_eig_vect+num_eig_vect);
+
+  coarse_self_couplings_clover_PRECISION( eta+start*vector_size, phi+start*vector_size,
+                                          op->clover+start*clover_size, (end-start)*vector_size, l );
+#ifdef HAVE_TM // tm_term
+  if (op->mu + op->mu_odd_shift != 0.0 || op->mu + op->mu_even_shift != 0.0 )
+    coarse_add_anti_block_diagonal_PRECISION( eta+start*vector_size, phi+start*vector_size, 
+                                              op->tm_term+start*block_size, (end-start)*vector_size, l );
 #endif
-    while ( phi_pt < phi_end_pt ) {
-      // A
-      mvp_PRECISION( eta_pt, clover_pt, phi_pt, num_eig_vect );
-      clover_pt += clover_step_size1; eta_pt += num_eig_vect; phi_pt += num_eig_vect;
-      // D
-      mvp_PRECISION( eta_pt, clover_pt, phi_pt, num_eig_vect );
-      clover_pt += clover_step_size1; phi_pt -= num_eig_vect;
-      // C = -B*
-      nmvh_PRECISION( eta_pt, clover_pt, phi_pt, num_eig_vect );
-      phi_pt += num_eig_vect; eta_pt -= num_eig_vect;
-      // B
-      mv_PRECISION( eta_pt, clover_pt, phi_pt, num_eig_vect );
-      clover_pt += clover_step_size2; phi_pt += num_eig_vect; eta_pt += site_var;
- }
-}
+#ifdef HAVE_TM1p1 //eps_term
+  if ( g.n_flavours == 2 &&
+       ( op->epsbar != 0 || op->epsbar_ig5_odd_shift != 0 || op->epsbar_ig5_odd_shift != 0 ) )
+    coarse_add_doublet_coupling_PRECISION( eta+start*vector_size, phi+start*vector_size, 
+                                           op->epsbar_term+start*block_size, (end-start)*vector_size, l );
+#endif
 
+}
 
 void coarse_aggregate_block_diagonal_PRECISION( vector_PRECISION eta1, vector_PRECISION eta2, vector_PRECISION phi,
                                                 config_PRECISION block, level_struct *l ) {
@@ -466,109 +437,6 @@ void coarse_aggregate_block_diagonal_PRECISION( vector_PRECISION eta1, vector_PR
   }
 }
 
-
-void coarse_add_block_diagonal_PRECISION( vector_PRECISION eta, vector_PRECISION phi,
-                 config_PRECISION block, int length, level_struct *l ) {
-
-  int num_eig_vect = l->num_parent_eig_vect,
-    block_step_size = (num_eig_vect * (num_eig_vect+1))/2;
-  config_PRECISION block_pt = block;
-  vector_PRECISION phi_pt=phi, eta_pt=eta, phi_end_pt=phi+length;
-  // U(x) = [ A 0      , A=A*, D=D* diag. excluded
-  //          0 D ]
-  // storage order: upper triangle of A, upper triangle of D, columnwise
-  // diagonal coupling
-#ifdef HAVE_TM1p1
-  if( g.n_flavours == 2 ) {
-    while ( phi_pt < phi_end_pt ) {
-      // A
-      pmvp_PRECISION( eta_pt, block_pt, phi_pt, num_eig_vect );
-      eta_pt += num_eig_vect; phi_pt += num_eig_vect;
-      mmvp_PRECISION( eta_pt, block_pt, phi_pt, num_eig_vect );
-      block_pt += block_step_size; eta_pt += num_eig_vect; phi_pt += num_eig_vect;
-      // D
-      pmvp_PRECISION( eta_pt, block_pt, phi_pt, num_eig_vect );
-      eta_pt += num_eig_vect; phi_pt += num_eig_vect;
-      mmvp_PRECISION( eta_pt, block_pt, phi_pt, num_eig_vect );
-      block_pt += block_step_size; eta_pt += num_eig_vect; phi_pt += num_eig_vect;
-    }
-  } else
-#endif
-    while ( phi_pt < phi_end_pt ) {
-      // A
-      pmvp_PRECISION( eta_pt, block_pt, phi_pt, num_eig_vect );
-      block_pt += block_step_size; eta_pt += num_eig_vect; phi_pt += num_eig_vect;
-      // D
-      pmvp_PRECISION( eta_pt, block_pt, phi_pt, num_eig_vect );
-      block_pt += block_step_size; eta_pt += num_eig_vect; phi_pt += num_eig_vect;
-    }
-}
-
-void coarse_add_anti_block_diagonal_PRECISION( vector_PRECISION eta, vector_PRECISION phi,
-                 config_PRECISION block, int length, level_struct *l ) {
-
-  int num_eig_vect = l->num_parent_eig_vect,
-    block_step_size = (num_eig_vect * (num_eig_vect+1))/2;
-  config_PRECISION block_pt = block;
-  vector_PRECISION phi_pt=phi, eta_pt=eta, phi_end_pt=phi+length;
-  // U(x) = [ A 0      , A=-A*, D=-D* diag. excluded
-  //          0 D ]
-  // storage order: upper triangle of A, upper triangle of D, columnwise
-  // diagonal coupling
-#ifdef HAVE_TM1p1
-  if( g.n_flavours == 2 ) {
-    while ( phi_pt < phi_end_pt ) {
-      // A
-      pamvp_PRECISION( eta_pt, block_pt, phi_pt, num_eig_vect );
-      eta_pt += num_eig_vect; phi_pt += num_eig_vect;
-      mamvp_PRECISION( eta_pt, block_pt, phi_pt, num_eig_vect );
-      block_pt += block_step_size; eta_pt += num_eig_vect; phi_pt += num_eig_vect;
-      // D
-      pamvp_PRECISION( eta_pt, block_pt, phi_pt, num_eig_vect );
-      eta_pt += num_eig_vect; phi_pt += num_eig_vect;
-      mamvp_PRECISION( eta_pt, block_pt, phi_pt, num_eig_vect );
-      block_pt += block_step_size; eta_pt += num_eig_vect; phi_pt += num_eig_vect;
-    }
-  } else
-#endif
-    while ( phi_pt < phi_end_pt ) {
-      // A
-      pamvp_PRECISION( eta_pt, block_pt, phi_pt, num_eig_vect );
-      block_pt += block_step_size; eta_pt += num_eig_vect; phi_pt += num_eig_vect;
-      // D
-      pamvp_PRECISION( eta_pt, block_pt, phi_pt, num_eig_vect );
-      block_pt += block_step_size; eta_pt += num_eig_vect; phi_pt += num_eig_vect;
-    }
-}
-
-void coarse_add_doublet_coupling_PRECISION( vector_PRECISION eta, vector_PRECISION phi,
-                                            config_PRECISION block, int length, level_struct *l ) {
-
-#ifdef HAVE_TM1p1
-  int num_eig_vect = l->num_parent_eig_vect,
-    block_step_size = (num_eig_vect * (num_eig_vect+1))/2;
-  config_PRECISION block_pt = block;
-  vector_PRECISION phi_pt=phi, eta_pt=eta, phi_end_pt=phi+length;
-  // U(x) = [ 0 A      , A=-A*, D=-D* diag. excluded
-  //          D 0 ]
-  // storage order: upper triangle of A, upper triangle of D, columnwise
-  // diagonal coupling
-  
-  while ( phi_pt < phi_end_pt ) {
-    // A
-    pamvp_PRECISION( eta_pt, block_pt, phi_pt+num_eig_vect, num_eig_vect );
-    pamvp_PRECISION( eta_pt+num_eig_vect, block_pt, phi_pt, num_eig_vect );
-    block_pt += block_step_size; eta_pt += 2*num_eig_vect; phi_pt += 2*num_eig_vect;
-    // D
-    pamvp_PRECISION( eta_pt, block_pt, phi_pt+num_eig_vect, num_eig_vect );
-    pamvp_PRECISION( eta_pt+num_eig_vect, block_pt, phi_pt, num_eig_vect );
-    block_pt += block_step_size; eta_pt += 2*num_eig_vect; phi_pt += 2*num_eig_vect;
-  }
-#else
-  warning0("coarse_add_doublet_coupling_PRECISION called without HAVE_TM1p1 defined.\n");
-  return;
-#endif
-}
 
 
 void coarse_spinwise_self_couplings_PRECISION( vector_PRECISION eta1, vector_PRECISION eta2, vector_PRECISION phi,
@@ -599,11 +467,127 @@ void coarse_spinwise_self_couplings_PRECISION( vector_PRECISION eta1, vector_PRE
   }
 }
 
+void coarse_operator_PRECISION_set_couplings( operator_PRECISION_struct *op, level_struct *l,
+                                              struct Thread *threading ) {
 
-#ifndef VECTORIZE_COARSE_OPERATOR_PRECISION
-void coarse_operator_PRECISION_set_couplings( operator_PRECISION_struct *op, level_struct *l, struct Thread *threading ) { }
-void coarse_operator_PRECISION_set_couplings_clover( operator_PRECISION_struct *op, level_struct *l, struct Thread *threading ) { }
+  coarse_operator_PRECISION_set_neighbor_couplings( op, l, threading );
+  coarse_operator_PRECISION_set_self_couplings( op, l, threading );
+
+}
+
+void coarse_operator_PRECISION_set_neighbor_couplings( operator_PRECISION_struct *op, level_struct *l,
+                                                       struct Thread *threading ) {
+
+#ifdef OPTIMIZED_COARSE_NEIGHBOR_COUPLING_PRECISION
+  int nc_size = SQUARE(l->num_parent_eig_vect*2);
+  int n1, n2;
+  int column_offset = SIMD_LENGTH_PRECISION*((l->num_parent_eig_vect*2+SIMD_LENGTH_PRECISION-1)/SIMD_LENGTH_PRECISION); 
+  int start, end;
+  compute_core_start_end_custom(0, n, &start, &end, l, threading, 1);
+  int n_per_core = end-start;
+  int offset_v = 4*l->num_parent_eig_vect*column_offset;
+  
+  if ( l->depth > 0 ) {
+    n1 = l->num_lattice_sites;
+    n2 = 2*l->num_lattice_sites-l->num_inner_lattice_sites;
+  } else {
+    n1 = l->num_inner_lattice_sites;
+    n2 = l->num_inner_lattice_sites;
+  }
+    
+  START_LOCKED_MASTER(threading)
+  if( op->D_vectorized == NULL ) {
+    // 2 is for complex, 4 is for 4 directions
+    MALLOC_HUGEPAGES( op->D_vectorized, OPERATOR_TYPE_PRECISION, 2*8*l->num_parent_eig_vect*column_offset*n2, 64 );
+    MALLOC_HUGEPAGES( op->D_transformed_vectorized, OPERATOR_TYPE_PRECISION, 2*8*l->num_parent_eig_vect*column_offset*n2, 64 );
+  }
+  END_LOCKED_MASTER(threading)
+
+  copy_coarse_operator_to_vectorized_layout_PRECISION(
+      op->D + 4*start*nc_size,
+      op->D_vectorized + 4*start*offset_v,
+      n_per_core, l->num_parent_eig_vect);
+  copy_coarse_operator_to_transformed_vectorized_layout_PRECISION(
+      op->D + 4*start*nc_size,
+      op->D_transformed_vectorized + 4*start*offset_v,
+      n_per_core, l->num_parent_eig_vect);
+  // vectorize negative boundary
+  if ( l->depth > 0 ) {
+    compute_core_start_end_custom(n1, n2, &start, &end, l, threading, 1);
+    n_per_core = end-start;
+    copy_coarse_operator_to_vectorized_layout_PRECISION(
+        op->D + 4*start*nc_size,
+        op->D_vectorized + 4*start*offset_v,
+        n_per_core, l->num_parent_eig_vect);
+    copy_coarse_operator_to_transformed_vectorized_layout_PRECISION(
+        op->D + 4*start*nc_size,
+        op->D_transformed_vectorized + 4*start*offset_v,
+        n_per_core, l->num_parent_eig_vect);
+  }
+  SYNC_CORES(threading)
 #endif
+
+}
+
+void coarse_operator_PRECISION_set_self_couplings( operator_PRECISION_struct *op, level_struct *l, 
+                                                   struct Thread *threading ) {
+    
+#ifdef OPTIMIZED_COARSE_SELF_COUPLING_PRECISION
+  int n = l->num_inner_lattice_sites, nv = l->num_parent_eig_vect;
+  int sc_size = (nv)*(nv*2+1);
+  int start, end;
+  compute_core_start_end_custom(0, n, &start, &end, l, threading, 1);
+  int n_per_core = end-start;
+
+  int column_offset = SIMD_LENGTH_PRECISION*((2*nv+SIMD_LENGTH_PRECISION-1)/SIMD_LENGTH_PRECISION);
+  int offset_v = 2*2*nv*column_offset;
+  if( op->clover_vectorized == NULL ) {
+    START_LOCKED_MASTER(threading)
+    MALLOC_HUGEPAGES( op->clover_vectorized, OPERATOR_TYPE_PRECISION, offset_v*n, 64 );
+    END_LOCKED_MASTER(threading)
+  }
+  copy_coarse_operator_clover_to_vectorized_layout_PRECISION(
+      op->clover + start*sc_size,
+      op->clover_vectorized + start*offset_v,
+      n_per_core, nv);
+#ifdef HAVE_TM
+  int tm_size = (nv)*(nv+1);
+  if ( op->mu + op->mu_odd_shift != 0.0 || op->mu + op->mu_even_shift != 0.0 )
+    add_tm_term_to_vectorized_layout_PRECISION( 
+        op->tm_term + start*tm_size,
+        op->clover_vectorized + start*offset_v,
+        n_per_core, nv);
+#endif
+
+#ifdef HAVE_TM1p1
+  int column_doublet_offset = SIMD_LENGTH_PRECISION*((4*nv+SIMD_LENGTH_PRECISION-1)/SIMD_LENGTH_PRECISION);
+  int offset_doublet_v = 2*4*nv*column_doublet_offset;
+  int eps_size = (nv)*(nv+1);
+  if( op->clover_doublet_vectorized == NULL ) {
+    START_LOCKED_MASTER(threading)
+    MALLOC_HUGEPAGES( op->clover_doublet_vectorized, OPERATOR_TYPE_PRECISION, offset_doublet_v*n, 64 );
+    END_LOCKED_MASTER(threading)
+  }
+  copy_coarse_operator_clover_to_doublet_vectorized_layout_PRECISION(
+      op->clover + start*sc_size,
+      op->clover_doublet_vectorized + start*offset_doublet_v,
+      n_per_core, nv);
+  if ( op->epsbar != 0 || op->epsbar_ig5_odd_shift != 0 || op->epsbar_ig5_odd_shift != 0 )
+    add_epsbar_term_to_doublet_vectorized_layout_PRECISION(
+        op->epsbar_term + start*eps_size,
+        op->clover_doublet_vectorized + start*offset_doublet_v,
+        n_per_core, nv);
+#ifdef HAVE_TM
+  if ( op->mu + op->mu_odd_shift != 0.0 || op->mu + op->mu_even_shift != 0.0 )
+    add_tm_term_to_doublet_vectorized_layout_PRECISION(
+        op->tm_term + start*tm_size,
+        op->clover_doublet_vectorized + start*offset_doublet_v,
+        n_per_core, nv);
+#endif
+#endif
+  SYNC_CORES(threading)
+#endif
+}
 
 void coarse_gamma5_PRECISION( vector_PRECISION eta, vector_PRECISION phi, int start, int end, level_struct *l ) {
   
@@ -679,29 +663,31 @@ void coarse_tau1_gamma5_PRECISION( vector_PRECISION eta, vector_PRECISION phi, i
     }
 }
 
-#ifndef VECTORIZE_COARSE_OPERATOR_PRECISION
 void apply_coarse_operator_PRECISION( vector_PRECISION eta, vector_PRECISION phi, operator_PRECISION_struct *op,
                                       level_struct *l, struct Thread *threading ) {
   
   PROF_PRECISION_START( _SC, threading );
-  START_LOCKED_MASTER(threading)
-  coarse_self_couplings_PRECISION( eta, phi, op->clover, l->inner_vector_size, l );
-#ifdef HAVE_TM
-  if (g.mu + g.mu_odd_shift != 0.0 || g.mu + g.mu_even_shift != 0.0 )
-    coarse_add_anti_block_diagonal_PRECISION( eta, phi, op->tm_term, l->inner_vector_size, l );
+  int start;
+  int end;
+  compute_core_start_end_custom(0, l->num_inner_lattice_sites, &start, &end, l, threading, 1);
+
+#ifndef OPTIMIZED_COARSE_SELF_COUPLING_PRECISION
+  coarse_self_couplings_PRECISION( eta, phi, op, start, end, l);
+#else
+  coarse_self_couplings_PRECISION_vectorized( eta, phi, op, start, end, l );
 #endif
-#ifdef HAVE_TM1p1
-  if ( g.n_flavours == 2 &&
-       ( op->epsbar != 0 || op->epsbar_ig5_odd_shift != 0 || op->epsbar_ig5_odd_shift != 0 ) )
-    coarse_add_doublet_coupling_PRECISION( eta, phi, op->epsbar_term, l->inner_vector_size, l );
-#endif
-  END_LOCKED_MASTER(threading)
+
   PROF_PRECISION_STOP( _SC, 1, threading );
   PROF_PRECISION_START( _NC, threading );
+
+#ifndef OPTIMIZED_COARSE_NEIGHBOR_COUPLING_PRECISION
   coarse_hopping_term_PRECISION( eta, phi, op, _FULL_SYSTEM, l, threading );
+#else
+  coarse_hopping_term_PRECISION_vectorized( eta, phi, op, _FULL_SYSTEM, l, threading ); 
+#endif
+
   PROF_PRECISION_STOP( _NC, 1, threading );
 }
-#endif
 
 void g5D_apply_coarse_operator_PRECISION( vector_PRECISION eta, vector_PRECISION phi, operator_PRECISION_struct *op,
                                           level_struct *l, struct Thread *threading ) {
@@ -773,11 +759,7 @@ void coarse_operator_PRECISION_test_routine( level_struct *l, struct Thread *thr
     if ( !l->next_level->idle )
       vector_PRECISION_define_random( vc1, 0, civs, l->next_level );
     interpolate3_PRECISION( vp1, vc1, l, no_threading );
-    // diff = (global_norm_PRECISION( vp1, 0, ivs, l, no_threading)-global_norm_PRECISION( vc1, 0, civs, l->next_level, no_threading)) / global_norm_PRECISION( vc1, 0, civs, l->next_level, no_threading );
-    // test0_PRECISION("depth: %d, correctness of |P phi_c| = |phi_c|: %le\n", l->depth, abs_PRECISION(diff) );
     restrict_PRECISION( vc2, vp1, l, no_threading );
-    // diff = (global_norm_PRECISION( vp1, 0, ivs, l, no_threading)-global_norm_PRECISION( vc2, 0, civs, l->next_level, no_threading)) / global_norm_PRECISION( vc2, 0, civs, l->next_level, no_threading );
-    // test0_PRECISION("depth: %d, correctness of |phi| = |phi* P|: %le\n", l->depth, abs_PRECISION(diff) );
     if ( !l->next_level->idle ) {
       vector_PRECISION_minus( vc3, vc1, vc2, 0, civs, l->next_level );
       diff = global_norm_PRECISION( vc3, 0, civs, l->next_level, no_threading ) / global_norm_PRECISION( vc1, 0, civs, l->next_level, no_threading );
@@ -934,7 +916,7 @@ void coarse_operator_PRECISION_test_routine( level_struct *l, struct Thread *thr
     }
     START_LOCKED_MASTER(threading)
 
-
+      /*
     if ( l->level > 0 && l->depth > 0 && g.method == 3 && g.odd_even ) {
       vector_PRECISION_define_random( vp1, 0, ivs, l );
       block_to_oddeven_PRECISION( vp4, vp1, l, no_threading );
@@ -955,7 +937,7 @@ void coarse_operator_PRECISION_test_routine( level_struct *l, struct Thread *thr
       diff = global_norm_PRECISION( vp4, 0, ivs, l, no_threading ) / global_norm_PRECISION( vp2, 0, ivs, l, no_threading );
       test0_PRECISION("depth: %d, correctness of odd even preconditioned operator (smoother): %le\n", l->depth, diff );
     }
-    
+      */
     FREE( vp1, complex_PRECISION, 4*vs );
     FREE( vc1, complex_PRECISION, 3*cvs );
     END_LOCKED_MASTER(threading)

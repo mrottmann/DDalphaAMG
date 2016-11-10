@@ -63,8 +63,9 @@ void coarse_grid_correction_PRECISION_setup( level_struct *l, struct Thread *thr
       END_LOCKED_MASTER(threading)
       if ( g.method >= 4 && g.odd_even ) {
         START_LOCKED_MASTER(threading)
-        coarse_oddeven_setup_PRECISION( &(l->next_level->s_PRECISION.op), _REORDER, l->next_level );
+        coarse_oddeven_alloc_PRECISION( l->next_level );
         END_LOCKED_MASTER(threading)
+        coarse_oddeven_setup_PRECISION( &(l->next_level->s_PRECISION.op), _REORDER, l->next_level, threading );
       }
       coarse_operator_PRECISION_set_couplings( &(l->next_level->s_PRECISION.op), l->next_level, threading );
       START_LOCKED_MASTER(threading)
@@ -73,8 +74,9 @@ void coarse_grid_correction_PRECISION_setup( level_struct *l, struct Thread *thr
     }
     if ( !l->next_level->idle && l->next_level->level == 0 && g.odd_even ) {
       START_LOCKED_MASTER(threading)
-      coarse_oddeven_setup_PRECISION( &(l->next_level->s_PRECISION.op), _NO_REORDERING, l->next_level );
+      coarse_oddeven_alloc_PRECISION( l->next_level );
       END_LOCKED_MASTER(threading)
+      coarse_oddeven_setup_PRECISION( &(l->next_level->s_PRECISION.op), _NO_REORDERING, l->next_level, threading );
     } else if ( !l->next_level->idle && l->next_level->level == 0 ) {
       coarse_operator_PRECISION_set_couplings( &(l->next_level->s_PRECISION.op), l->next_level, threading );
     }
@@ -305,13 +307,13 @@ void re_setup_PRECISION( level_struct *l, struct Thread *threading ) {
         schwarz_PRECISION_boundary_update( &(l->next_level->s_PRECISION), l->next_level );
         END_LOCKED_MASTER(threading)
         if ( g.method >= 4 && g.odd_even ) {
-          coarse_oddeven_re_setup_PRECISION( &(l->next_level->s_PRECISION.op), _REORDER, l->next_level, threading );
+          coarse_oddeven_setup_PRECISION( &(l->next_level->s_PRECISION.op), _REORDER, l->next_level, threading );
         } else {
           coarse_operator_PRECISION_set_couplings( &(l->next_level->s_PRECISION.op), l->next_level, threading );
         }
       }
       if ( !l->next_level->idle && l->next_level->level == 0 && g.odd_even ) {
-        coarse_oddeven_re_setup_PRECISION( &(l->next_level->s_PRECISION.op), _NO_REORDERING, l->next_level, threading );
+        coarse_oddeven_setup_PRECISION( &(l->next_level->s_PRECISION.op), _NO_REORDERING, l->next_level, threading );
       } else if ( !l->next_level->idle && l->next_level->level == 0 ) {
         coarse_operator_PRECISION_set_couplings( &(l->next_level->s_PRECISION.op), l->next_level, threading );
       }
@@ -400,13 +402,13 @@ void inv_iter_2lvl_extension_setup_PRECISION( int setup_iter, level_struct *l, s
         schwarz_PRECISION_boundary_update( &(l->next_level->s_PRECISION), l->next_level );
         END_LOCKED_MASTER(threading)
         if ( g.method >= 4 && g.odd_even ) {
-          coarse_oddeven_re_setup_PRECISION( &(l->next_level->s_PRECISION.op), _REORDER, l->next_level, threading );
+          coarse_oddeven_setup_PRECISION( &(l->next_level->s_PRECISION.op), _REORDER, l->next_level, threading );
         } else {
           coarse_operator_PRECISION_set_couplings( &(l->next_level->s_PRECISION.op), l->next_level, threading );
         }
       }
       if ( !l->next_level->idle && l->next_level->level == 0 && g.odd_even ) {
-        coarse_oddeven_re_setup_PRECISION( &(l->next_level->s_PRECISION.op), _NO_REORDERING, l->next_level, threading );
+        coarse_oddeven_setup_PRECISION( &(l->next_level->s_PRECISION.op), _NO_REORDERING, l->next_level, threading );
       } else if ( !l->next_level->idle && l->next_level->level == 0 ) {
         coarse_operator_PRECISION_set_couplings( &(l->next_level->s_PRECISION.op), l->next_level, threading );
       }

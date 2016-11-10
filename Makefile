@@ -1,9 +1,9 @@
 # --- COMPILER ----------------------------------------
-CC = mpicc 
+CC = mpiicc 
 
 # --- CFLAGS -----------------------------------------
-CFLAGS_gnu = -std=gnu99 -Wall -pedantic -O3 -ffast-math -msse4.2 #-fopenmp 
-CFLAGS_intel = -std=gnu99 -Wall -pedantic -O3  -xHOST #-qopenmp 
+CFLAGS_gnu = -std=gnu99 -Wall -pedantic -O3 -ffast-math -msse4.2 -fopenmp 
+CFLAGS_intel = -std=gnu99 -Wall -pedantic -O3  -xHOST -qopenmp 
 CFLAGS = $(CFLAGS_intel)
 
 # --- DO NOT CHANGE -----------------------------------
@@ -45,8 +45,8 @@ LIMELIB= -L$(LIMEDIR)/lib -llime
 # -DPARAMOUTPUT -DTRACK_RES -DFGMRES_RESTEST -DPROFILING
 # -DSINGLE_ALLREDUCE_ARNOLDI
 # -DCOARSE_RES -DSCHWARZ_RES -DTESTVECTOR_ANALYSIS -DDEBUG
-OPT_VERSION_FLAGS = $(CFLAGS) $(LIMEFLAGS) $(H5FLAGS) -DPARAMOUTPUT -DTRACK_RES -DSSE #-DOPENMP
-DEVEL_VERSION_FLAGS = $(CFLAGS) $(LIMEFLAGS) -DDEBUG -DPARAMOUTPUT -DTRACK_RES -DFGMRES_RESTEST -DPROFILING -DCOARSE_RES -DSCHWARZ_RES -DTESTVECTOR_ANALYSIS -DSSE #-DOPENMP
+OPT_VERSION_FLAGS = $(CFLAGS) $(LIMEFLAGS) $(H5FLAGS) -DPARAMOUTPUT -DTRACK_RES -DSSE -DOPENMP
+DEVEL_VERSION_FLAGS = $(CFLAGS) $(LIMEFLAGS) -DDEBUG -DPARAMOUTPUT -DTRACK_RES -DFGMRES_RESTEST -DPROFILING -DCOARSE_RES -DSCHWARZ_RES -DTESTVECTOR_ANALYSIS -DSSE -DOPENMP
 
 
 all: execs library exec-tests

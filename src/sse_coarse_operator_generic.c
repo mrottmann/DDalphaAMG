@@ -257,130 +257,6 @@ void coarse_operator_PRECISION_setup_vectorized( complex_PRECISION *operator, le
   SYNC_CORES(threading)
 }
 #endif
-
-#ifdef VECTORIZE_COARSE_OPERATOR_PRECISION
-void coarse_operator_PRECISION_set_couplings( operator_PRECISION_struct *op, level_struct *l, struct Thread *threading ) {
-
-  int n = l->num_inner_lattice_sites;
-  int sc_size = (l->num_parent_eig_vect)*(l->num_parent_eig_vect*2+1);
-  int nc_size = SQUARE(l->num_parent_eig_vect*2);
-  int n1, n2;
-  if ( l->depth > 0 ) {
-    n1 = l->num_lattice_sites;
-    n2 = 2*l->num_lattice_sites-l->num_inner_lattice_sites;
-  } else {
-    n1 = l->num_inner_lattice_sites;
-    n2 = l->num_inner_lattice_sites;
-  }
-    
-  START_LOCKED_MASTER(threading)
-  if( op->D_vectorized == NULL ) {
-    int column_offset = SIMD_LENGTH_PRECISION*((l->num_parent_eig_vect*2+SIMD_LENGTH_PRECISION-1)/SIMD_LENGTH_PRECISION);
-    // 2 is for complex, 4 is for 4 directions
-    MALLOC_HUGEPAGES( op->D_vectorized, OPERATOR_TYPE_PRECISION, 2*8*l->num_parent_eig_vect*column_offset*n2, 64 );
-    MALLOC_HUGEPAGES( op->D_transformed_vectorized, OPERATOR_TYPE_PRECISION, 2*8*l->num_parent_eig_vect*column_offset*n2, 64 );
-    MALLOC_HUGEPAGES( op->clover_vectorized, OPERATOR_TYPE_PRECISION, 4*l->num_parent_eig_vect*column_offset*n, 64 );
-#ifdef HAVE_TM1p1
-    MALLOC_HUGEPAGES( op->clover_doublet_vectorized, OPERATOR_TYPE_PRECISION, 2*4*l->num_parent_eig_vect*column_offset*n, 64 );
-#endif
-  }
-  END_LOCKED_MASTER(threading)
-
-  int start, end;
-  compute_core_start_end_custom(0, n, &start, &end, l, threading, 1);
-  int n_per_core = end-start;
-  int column_offset = SIMD_LENGTH_PRECISION*((l->num_parent_eig_vect*2+SIMD_LENGTH_PRECISION-1)/SIMD_LENGTH_PRECISION);
-  int offset_v = 4*l->num_parent_eig_vect*column_offset;
-  copy_coarse_operator_to_vectorized_layout_PRECISION(
-      op->D + 4*start*nc_size,
-      op->D_vectorized + 4*start*offset_v,
-      n_per_core, l->num_parent_eig_vect);
-  copy_coarse_operator_to_transformed_vectorized_layout_PRECISION(
-      op->D + 4*start*nc_size,
-      op->D_transformed_vectorized + 4*start*offset_v,
-      n_per_core, l->num_parent_eig_vect);
-  copy_coarse_operator_clover_to_vectorized_layout_PRECISION(
-      op->clover + start*sc_size,
-      op->clover_vectorized + start*offset_v,
-      n_per_core, l->num_parent_eig_vect);
-#ifdef HAVE_TM
-  int tm_size = (l->num_parent_eig_vect)*(l->num_parent_eig_vect+1);
-  add_tm_term_to_vectorized_layout_PRECISION(
-      op->tm_term + start*tm_size,
-      op->clover_vectorized + start*offset_v,
-      n_per_core, l->num_parent_eig_vect);
-#endif
-#ifdef HAVE_TM1p1
-  copy_coarse_operator_clover_to_doublet_vectorized_layout_PRECISION(
-      op->clover + start*sc_size,
-      op->clover_doublet_vectorized + start*offset_v,
-      n_per_core, l->num_parent_eig_vect);
-#ifdef HAVE_TM
-  add_tm_term_to_doublet_vectorized_layout_PRECISION(
-      op->tm_term + start*tm_size,
-      op->clover_doublet_vectorized + start*offset_v,
-      n_per_core, l->num_parent_eig_vect);
-#endif
-#endif
-  SYNC_CORES(threading)
-  
-  // vectorize negative boundary
-  if ( l->depth > 0 ) {
-    compute_core_start_end_custom(n1, n2, &start, &end, l, threading, 1);
-    n_per_core = end-start;
-    copy_coarse_operator_to_vectorized_layout_PRECISION(
-        op->D + 4*start*nc_size,
-        op->D_vectorized + 4*start*offset_v,
-        n_per_core, l->num_parent_eig_vect);
-    copy_coarse_operator_to_transformed_vectorized_layout_PRECISION(
-        op->D + 4*start*nc_size,
-        op->D_transformed_vectorized + 4*start*offset_v,
-        n_per_core, l->num_parent_eig_vect);
-    SYNC_CORES(threading)
-  }
-}
-
-void coarse_operator_PRECISION_set_couplings_clover( operator_PRECISION_struct *op, level_struct *l, struct Thread *threading ) {
-    
-  if(op->D_vectorized == NULL) 
-    coarse_operator_PRECISION_set_couplings(op, l, threading);
-  
-  int n = l->num_inner_lattice_sites;
-  int sc_size = (l->num_parent_eig_vect)*(l->num_parent_eig_vect*2+1);
-  int start, end;
-
-  compute_core_start_end_custom(0, n, &start, &end, l, threading, 1);
-  int n_per_core = end-start;
-  int column_offset = SIMD_LENGTH_PRECISION*((l->num_parent_eig_vect*2+SIMD_LENGTH_PRECISION-1)/SIMD_LENGTH_PRECISION);
-  int offset_v = 2*l->num_parent_eig_vect*2*column_offset;
-
-  copy_coarse_operator_clover_to_vectorized_layout_PRECISION(
-      op->clover + start*sc_size,
-      op->clover_vectorized + start*offset_v,
-      n_per_core, l->num_parent_eig_vect);
-#ifdef HAVE_TM
-  int tm_size = (l->num_parent_eig_vect)*(l->num_parent_eig_vect+1);
-  add_tm_term_to_vectorized_layout_PRECISION( 
-      op->tm_term + start*tm_size,
-      op->clover_vectorized + start*offset_v,
-      n_per_core, l->num_parent_eig_vect);
-#endif
-#ifdef HAVE_TM1p1
-  copy_coarse_operator_clover_to_doublet_vectorized_layout_PRECISION(
-      op->clover + start*sc_size,
-      op->clover_doublet_vectorized + start*offset_v,
-      n_per_core, l->num_parent_eig_vect);
-#ifdef HAVE_TM
-  add_tm_term_to_doublet_vectorized_layout_PRECISION(
-      op->tm_term + start*tm_size,
-      op->clover_doublet_vectorized + start*offset_v,
-      n_per_core, l->num_parent_eig_vect);
-#endif
-#endif
-
-}
-#endif
-
  
 void set_coarse_self_coupling_PRECISION_vectorized( complex_PRECISION *spin_0_1, complex_PRECISION *spin_2_3,
     complex_PRECISION *V, level_struct *l, int site, const int n_rhs, complex_PRECISION *tmp ) {
@@ -393,7 +269,6 @@ void set_coarse_block_diagonal_PRECISION_vectorized( complex_PRECISION *spin_0_1
 
   sse_set_coarse_block_diagonal_PRECISION( spin_0_1, spin_2_3, V, l, site, n_rhs, tmp );
 }
-
 
 void set_coarse_self_coupling_PRECISION_vectorized_finalize( level_struct *l, int site, const int n_rhs, complex_PRECISION *tmp ) {
 
@@ -556,12 +431,7 @@ void copy_coarse_operator_to_vectorized_layout_PRECISION( config_PRECISION D,
   // offset between blocks in D
   int block_offset = vecs*vecs;
 
-#ifndef STORE_COARSE_OPERATOR_AS_FLOAT16
   PRECISION *out_tmp = D_vectorized;
-#else
-  // 2 is for complex
-  PRECISION out_tmp[2*column_offset*2*vecs];
-#endif
 
   // we zero out the padded area to avoid potential floating-point errors
   // D_vectorized is
@@ -604,13 +474,8 @@ void copy_coarse_operator_to_vectorized_layout_PRECISION( config_PRECISION D,
       }
     }
     D += 2*vecs*2*vecs;
-#ifndef STORE_COARSE_OPERATOR_AS_FLOAT16
     // out_tmp is an alias for the actual output
     out_tmp += 2*column_offset*2*vecs;
-#else
-    convert_PRECISION_to_half(2*column_offset*2*vecs, out_tmp, D_vectorized);
-    D_vectorized += 2*column_offset*2*vecs;
-#endif
   }
 }
 
@@ -627,12 +492,7 @@ void copy_coarse_operator_to_transformed_vectorized_layout_PRECISION(config_PREC
   // offset between blocks in D
   int block_offset = vecs*vecs;
 
-#ifndef STORE_COARSE_OPERATOR_AS_FLOAT16
   PRECISION *out_tmp = D_vectorized;
-#else
-  // 2 is for complex
-  PRECISION out_tmp[2*column_offset*2*vecs];
-#endif
 
   // we zero out the padded area to avoid potential floating-point errors
   // D_vectorized is
@@ -675,13 +535,8 @@ void copy_coarse_operator_to_transformed_vectorized_layout_PRECISION(config_PREC
       }
     }
     D += 2*vecs*2*vecs;
-#ifndef STORE_COARSE_OPERATOR_AS_FLOAT16
     // out_tmp is an alias for the actual output
     out_tmp += 2*column_offset*2*vecs;
-#else
-    convert_PRECISION_to_half(2*column_offset*2*vecs, out_tmp, D_vectorized);
-    D_vectorized += 2*column_offset*2*vecs;
-#endif
   }
 }
 
@@ -698,12 +553,7 @@ void copy_coarse_operator_clover_to_vectorized_layout_PRECISION(config_PRECISION
   int offset_to_D = (vecs*vecs+vecs)/2; // upper triangle of A including diagonal
   int offset_to_B = 2*offset_to_D; // B comes after A and D
 
-#ifndef STORE_COARSE_OPERATOR_AS_FLOAT16
   PRECISION *out_tmp = clover_vectorized;
-#else
-  // 2 is for complex
-  PRECISION out_tmp[2*column_offset*2*vecs];
-#endif
 
   // we zero out the padded area to avoid potential floating-point errors
   // cloverD_vectorized is
@@ -766,47 +616,37 @@ void copy_coarse_operator_clover_to_vectorized_layout_PRECISION(config_PRECISION
       }
     }
     clover += offset_to_B + vecs*vecs;
-#ifndef STORE_COARSE_OPERATOR_AS_FLOAT16
     // out_tmp is an alias for the actual output
     out_tmp += 2*column_offset*2*vecs;
-#else
-    convert_PRECISION_to_half(2*column_offset*2*vecs, out_tmp, clover_vectorized);
-    clover_vectorized += 2*column_offset*2*vecs;
-#endif
   }
 }
 
-void add_tm_term_to_vectorized_layout_PRECISION(config_PRECISION tm_term,
-    OPERATOR_TYPE_PRECISION *clover_vectorized, int num_aggregates, int num_eig_vect) {
-#ifdef HAVE_TM
+void copy_coarse_operator_clover_to_doublet_vectorized_layout_PRECISION(config_PRECISION clover,
+                                                                        OPERATOR_TYPE_PRECISION *clover_vectorized,
+                                                                        int num_aggregates, int num_eig_vect) {
+
   int vecs = num_eig_vect;
   // in vectorized layout clover is stored column wise, but not split into ABCD
   // each column is padded, such that next column can also start at 64B boundary
-  int column_offset = SIMD_LENGTH_PRECISION*((2*num_eig_vect+SIMD_LENGTH_PRECISION-1)/SIMD_LENGTH_PRECISION);
+  int column_offset = SIMD_LENGTH_PRECISION*((4*vecs+SIMD_LENGTH_PRECISION-1)/SIMD_LENGTH_PRECISION);
   // offset between blocks in clover
   int offset_to_D = (vecs*vecs+vecs)/2; // upper triangle of A including diagonal
+  int offset_to_B = 2*offset_to_D; // B comes after A and D
 
-#ifndef STORE_COARSE_OPERATOR_AS_FLOAT16
   PRECISION *out_tmp = clover_vectorized;
-#else
-  // 2 is for complex
-  PRECISION out_tmp[2*column_offset*2*vecs];
-  for (int i=0; i<2*column_offset*2*vecs; i++)
-    out_tmp=0;
-#endif
 
-  // we zero out the padded area to avoid potential floating-point errors
   // cloverD_vectorized is
-  // AB
-  // CD
-  // 00
+  // A0B0
+  // 0A0B
+  // C0D0
+  // 0C0D
+  // 0000  we zero out the padded area to avoid potential floating-point errors
   // (column wise, size of zeros such that columns length is multiple of 64B)
 
   // 4 directions
   for ( int a=0; a<num_aggregates; a++ ) {
     for(int i=0; i<vecs; i++) {
       for(int j=0; j<vecs; j++) {
-        // A
         // primed indices to transpose input when necessary to get lower triangle of output
         int ip = i;
         int jp = j;
@@ -817,23 +657,212 @@ void add_tm_term_to_vectorized_layout_PRECISION(config_PRECISION tm_term,
           sign = -1.0;
         }
         int offset_to_column = (ip*ip+ip)/2; // upper triangle including diagonal
-        out_tmp[(2*i+0)*column_offset + j] += sign*creal(tm_term[offset_to_column+jp]);
-        out_tmp[(2*i+1)*column_offset + j] += cimag(tm_term[offset_to_column+jp]);
-        out_tmp[(2*(i+vecs)+0)*column_offset + j + vecs] += sign*creal(tm_term[offset_to_D + offset_to_column+jp]);
-        out_tmp[(2*(i+vecs)+1)*column_offset + j + vecs] += cimag(tm_term[offset_to_D + offset_to_column+jp]);
+        // A
+        out_tmp[(2*(i+0*vecs)+0)*column_offset + j + 0*vecs] =
+        out_tmp[(2*(i+1*vecs)+0)*column_offset + j + 1*vecs] = creal(clover[offset_to_column+jp]);
+        out_tmp[(2*(i+0*vecs)+1)*column_offset + j + 0*vecs] =
+        out_tmp[(2*(i+1*vecs)+1)*column_offset + j + 1*vecs] = sign*cimag(clover[offset_to_column+jp]);
+        // B
+        out_tmp[(2*(i+2*vecs)+0)*column_offset + j + 0*vecs] =
+        out_tmp[(2*(i+3*vecs)+0)*column_offset + j + 1*vecs] = creal(clover[offset_to_B + i*vecs+j]);
+        out_tmp[(2*(i+2*vecs)+1)*column_offset + j + 0*vecs] = 
+        out_tmp[(2*(i+3*vecs)+1)*column_offset + j + 1*vecs] = cimag(clover[offset_to_B + i*vecs+j]);
+        // C = -B^dagger
+        out_tmp[(2*(i+0*vecs)+0)*column_offset + j + 2*vecs] =
+        out_tmp[(2*(i+1*vecs)+0)*column_offset + j + 3*vecs] = -creal(clover[offset_to_B + j*vecs+i]);
+        out_tmp[(2*(i+0*vecs)+1)*column_offset + j + 2*vecs] =
+        out_tmp[(2*(i+1*vecs)+1)*column_offset + j + 3*vecs] = cimag(clover[offset_to_B + j*vecs+i]);
+        // D
+        out_tmp[(2*(i+2*vecs)+0)*column_offset + j + 2*vecs] = 
+        out_tmp[(2*(i+3*vecs)+0)*column_offset + j + 3*vecs] = creal(clover[offset_to_D + offset_to_column+jp]);
+        out_tmp[(2*(i+2*vecs)+1)*column_offset + j + 2*vecs] = 
+        out_tmp[(2*(i+3*vecs)+1)*column_offset + j + 3*vecs] = sign*cimag(clover[offset_to_D + offset_to_column+jp]);
+        // 0
+        out_tmp[(2*(i+0*vecs)+0)*column_offset + j + 1*vecs] =
+        out_tmp[(2*(i+0*vecs)+1)*column_offset + j + 1*vecs] = 
+        out_tmp[(2*(i+0*vecs)+0)*column_offset + j + 3*vecs] =
+        out_tmp[(2*(i+0*vecs)+1)*column_offset + j + 3*vecs] = 
+        out_tmp[(2*(i+1*vecs)+0)*column_offset + j + 0*vecs] =
+        out_tmp[(2*(i+1*vecs)+1)*column_offset + j + 0*vecs] =
+        out_tmp[(2*(i+1*vecs)+0)*column_offset + j + 2*vecs] =
+        out_tmp[(2*(i+1*vecs)+1)*column_offset + j + 2*vecs] =
+        out_tmp[(2*(i+2*vecs)+0)*column_offset + j + 1*vecs] =
+        out_tmp[(2*(i+2*vecs)+1)*column_offset + j + 1*vecs] =
+        out_tmp[(2*(i+2*vecs)+0)*column_offset + j + 3*vecs] =
+        out_tmp[(2*(i+2*vecs)+1)*column_offset + j + 3*vecs] =
+        out_tmp[(2*(i+3*vecs)+0)*column_offset + j + 0*vecs] =
+        out_tmp[(2*(i+3*vecs)+1)*column_offset + j + 0*vecs] =
+        out_tmp[(2*(i+3*vecs)+0)*column_offset + j + 2*vecs] =
+        out_tmp[(2*(i+3*vecs)+1)*column_offset + j + 2*vecs] = 0.0;
+      }
+      // zero
+      for(int j=4*vecs; j<column_offset; j++) {
+        out_tmp[(2*(i+0*vecs)+0)*column_offset + j] = 
+        out_tmp[(2*(i+0*vecs)+1)*column_offset + j] = 
+        out_tmp[(2*(i+1*vecs)+0)*column_offset + j] = 
+        out_tmp[(2*(i+1*vecs)+1)*column_offset + j] = 
+        out_tmp[(2*(i+2*vecs)+0)*column_offset + j] = 
+        out_tmp[(2*(i+2*vecs)+1)*column_offset + j] = 
+        out_tmp[(2*(i+3*vecs)+0)*column_offset + j] = 
+        out_tmp[(2*(i+3*vecs)+1)*column_offset + j] = 0.0;
       }
     }
+    clover += offset_to_B + vecs*vecs;
+    // out_tmp is an alias for the actual output
+    out_tmp += 2*4*vecs*column_offset;
+  }
+}
 
-    tm_term += 2*offset_to_D;
-#ifndef STORE_COARSE_OPERATOR_AS_FLOAT16
+
+void add_tm_term_to_vectorized_layout_PRECISION(config_PRECISION tm_term, OPERATOR_TYPE_PRECISION *clover_vectorized,
+                                                int num_aggregates, int num_eig_vect) {
+#ifdef HAVE_TM
+  int vecs = num_eig_vect;
+  // in vectorized layout clover is stored column wise, but not split into ABCD
+  // each column is padded, such that next column can also start at 64B boundary
+  int column_offset = SIMD_LENGTH_PRECISION*((2*num_eig_vect+SIMD_LENGTH_PRECISION-1)/SIMD_LENGTH_PRECISION);
+  // offset between blocks in clover
+  int offset_to_F = (vecs*vecs+vecs)/2; // upper triangle of A including diagonal
+
+  PRECISION *out_tmp = clover_vectorized;
+
+  // we add the tm term to cloverD_vectorized
+  // AB   E0
+  // CD + 0F
+  // 00   00
+  // (column wise, size of zeros such that columns length is multiple of 64B)
+
+  // 4 directions
+  for ( int a=0; a<num_aggregates; a++ ) {
+    for(int i=0; i<vecs; i++) {
+      for(int j=0; j<vecs; j++) {
+        // primed indices to transpose input when necessary to get lower triangle of output
+        int ip = i;
+        int jp = j;
+        PRECISION sign = 1.0;
+        if(j > i) {
+          ip = j;
+          jp = i;
+          sign = -1.0;
+        }
+        int offset_to_column = (ip*ip+ip)/2; // upper triangle including diagonal
+        // E
+        out_tmp[(2*i+0)*column_offset + j] += sign*creal(tm_term[offset_to_column+jp]);
+        out_tmp[(2*i+1)*column_offset + j] += cimag(tm_term[offset_to_column+jp]);
+        // F
+        out_tmp[(2*(i+vecs)+0)*column_offset + j + vecs] += sign*creal(tm_term[offset_to_F + offset_to_column+jp]);
+        out_tmp[(2*(i+vecs)+1)*column_offset + j + vecs] += cimag(tm_term[offset_to_F + offset_to_column+jp]);
+      }
+    }
+    tm_term += 2*offset_to_F;
     // out_tmp is an alias for the actual output
     out_tmp += 2*column_offset*2*vecs;
-#else
-    //TODO
-    error0("STORE_COARSE_OPERATOR_AS_FLOAT16 not implemented for HAVE_TM")
-    convert_PRECISION_to_half(2*column_offset*2*vecs, out_tmp, clover_vectorized);
-    clover_vectorized += 2*column_offset*2*vecs;
+  }
 #endif
+}
+
+void add_tm_term_to_doublet_vectorized_layout_PRECISION(config_PRECISION tm_term, OPERATOR_TYPE_PRECISION *clover_vectorized,
+                                                int num_aggregates, int num_eig_vect) {
+#ifdef HAVE_TM
+  int vecs = num_eig_vect;
+  // in vectorized layout clover is stored column wise, but not split into ABCD
+  // each column is padded, such that next column can also start at 64B boundary
+  int column_offset = SIMD_LENGTH_PRECISION*((4*vecs+SIMD_LENGTH_PRECISION-1)/SIMD_LENGTH_PRECISION);
+  // offset between blocks in clover
+  int offset_to_F = (vecs*vecs+vecs)/2; // upper triangle of A including diagonal
+
+  PRECISION *out_tmp = clover_vectorized;
+
+  // we add/sub the tm term to cloverD_vectorized
+  // A0B0   E000   0000
+  // 0A0B + 0000 - 0E00
+  // C0D0   00F0   0000
+  // 0C0D   0000   000F
+  // 0000   0000   0000
+  // (column wise, size of zeros such that columns length is multiple of 64B)
+
+  // 4 directions
+  for ( int a=0; a<num_aggregates; a++ ) {
+    for(int i=0; i<vecs; i++) {
+      for(int j=0; j<vecs; j++) {
+        // primed indices to transpose input when necessary to get lower triangle of output
+        int ip = i;
+        int jp = j;
+        PRECISION sign = 1.0;
+        if(j > i) {
+          ip = j;
+          jp = i;
+          sign = -1.0;
+        }
+        int offset_to_column = (ip*ip+ip)/2; // upper triangle including diagonal
+        // E
+        out_tmp[(2*(i+0*vecs)+0)*column_offset + j + 0*vecs] += sign*creal(tm_term[offset_to_column+jp]);
+        out_tmp[(2*(i+0*vecs)+1)*column_offset + j + 0*vecs] += cimag(tm_term[offset_to_column+jp]); 
+        out_tmp[(2*(i+1*vecs)+0)*column_offset + j + 1*vecs] -= sign*creal(tm_term[offset_to_column+jp]);
+        out_tmp[(2*(i+1*vecs)+1)*column_offset + j + 1*vecs] -= cimag(tm_term[offset_to_column+jp]);
+        // F
+        out_tmp[(2*(i+2*vecs)+0)*column_offset + j + 2*vecs] += sign*creal(tm_term[offset_to_F+offset_to_column+jp]);
+        out_tmp[(2*(i+2*vecs)+1)*column_offset + j + 2*vecs] += cimag(tm_term[offset_to_F+offset_to_column+jp]);
+        out_tmp[(2*(i+3*vecs)+0)*column_offset + j + 3*vecs] -= sign*creal(tm_term[offset_to_F+offset_to_column+jp]);
+        out_tmp[(2*(i+3*vecs)+1)*column_offset + j + 3*vecs] -= cimag(tm_term[offset_to_F+offset_to_column+jp]);
+     }
+    }
+    tm_term += 2*offset_to_F;
+    // out_tmp is an alias for the actual output
+    out_tmp += 2*4*vecs*column_offset;
+  }
+#endif
+}
+
+void add_epsbar_term_to_doublet_vectorized_layout_PRECISION(config_PRECISION eps_term, OPERATOR_TYPE_PRECISION *clover_vectorized,
+                                                            int num_aggregates, int num_eig_vect) {
+#ifdef HAVE_TM1p1
+  int vecs = num_eig_vect;
+  // in vectorized layout clover is stored column wise, but not split into ABCD
+  // each column is padded, such that next column can also start at 64B boundary
+  int column_offset = SIMD_LENGTH_PRECISION*((4*vecs+SIMD_LENGTH_PRECISION-1)/SIMD_LENGTH_PRECISION);
+  // offset between blocks in clover
+  int offset_to_F = (vecs*vecs+vecs)/2; // upper triangle of A including diagonal
+
+  PRECISION *out_tmp = clover_vectorized;
+
+  // we add the eps term to cloverD_vectorized
+  // A0B0   0E00
+  // 0A0B + E000
+  // C0D0   000F
+  // 0C0D   00F0
+  // 0000   0000
+  // (column wise, size of zeros such that columns length is multiple of 64B)
+
+  // 4 directions
+  for ( int a=0; a<num_aggregates; a++ ) {
+    for(int i=0; i<vecs; i++) {
+      for(int j=0; j<vecs; j++) {
+        // primed indices to transpose input when necessary to get lower triangle of output
+        int ip = i;
+        int jp = j;
+        PRECISION sign = 1.0;
+        if(j > i) {
+          ip = j;
+          jp = i;
+          sign = -1.0;
+        }
+        int offset_to_column = (ip*ip+ip)/2; // upper triangle including diagonal
+        // E
+        out_tmp[(2*(i+0*vecs)+0)*column_offset + j + 1*vecs] += sign*creal(eps_term[offset_to_column+jp]);
+        out_tmp[(2*(i+0*vecs)+1)*column_offset + j + 1*vecs] += cimag(eps_term[offset_to_column+jp]); 
+        out_tmp[(2*(i+1*vecs)+0)*column_offset + j + 0*vecs] += sign*creal(eps_term[offset_to_column+jp]);
+        out_tmp[(2*(i+1*vecs)+1)*column_offset + j + 0*vecs] += cimag(eps_term[offset_to_column+jp]);
+        // F
+        out_tmp[(2*(i+2*vecs)+0)*column_offset + j + 3*vecs] += sign*creal(eps_term[offset_to_F+offset_to_column+jp]);
+        out_tmp[(2*(i+2*vecs)+1)*column_offset + j + 3*vecs] += cimag(eps_term[offset_to_F+offset_to_column+jp]);
+        out_tmp[(2*(i+3*vecs)+0)*column_offset + j + 2*vecs] += sign*creal(eps_term[offset_to_F+offset_to_column+jp]);
+        out_tmp[(2*(i+3*vecs)+1)*column_offset + j + 2*vecs] += cimag(eps_term[offset_to_F+offset_to_column+jp]);
+     }
+    }
+    eps_term += 2*offset_to_F;
+    // out_tmp is an alias for the actual output
+    out_tmp += 2*4*vecs*column_offset;
   }
 #endif
 }
@@ -923,57 +952,4 @@ void coarse_spinwise_site_self_couplings_PRECISION_vectorized(
   sse_coarse_spinwise_site_self_couplings_PRECISION( eta1, eta2, phi, clover, elements, l );
 }
 
-#ifdef VECTORIZE_COARSE_OPERATOR_PRECISION
-void coarse_block_operator_PRECISION( vector_PRECISION eta, vector_PRECISION phi, int start, schwarz_PRECISION_struct *s, 
-                                      level_struct *l, struct Thread *threading ) {
-  
-  START_UNTHREADED_FUNCTION(threading)
-
-  int n = s->num_block_sites, *length = s->dir_length, **index = s->index,
-      *ind, *neighbor = s->op.neighbor_table, m = l->num_lattice_site_var;
-  vector_PRECISION lphi = phi+start, leta = eta+start;
-  int column_offset = SIMD_LENGTH_PRECISION*((l->num_lattice_site_var+SIMD_LENGTH_PRECISION-1)/SIMD_LENGTH_PRECISION);
-  int vectorized_link_offset = 2*l->num_lattice_site_var*column_offset;
-  
-  // site-wise self coupling
-  coarse_self_couplings_PRECISION_vectorized( eta, phi, s->op.clover_vectorized, (start/m), (start/m)+n, l );
-
-  // inner block couplings
-  for ( int mu=0; mu<4; mu++ ) {
-    OPERATOR_TYPE_PRECISION *Dplus = s->op.D_vectorized +
-      (start/m)*4*vectorized_link_offset + mu*vectorized_link_offset;
-    OPERATOR_TYPE_PRECISION *Dminus = s->op.D_transformed_vectorized +
-      (start/m)*4*vectorized_link_offset + mu*vectorized_link_offset;
-    ind = index[mu]; // mu direction
-    for ( int i=0; i<length[mu]; i++ ) {
-      int k = ind[i]; int j = neighbor[5*k+mu+1];
-      // hopp
-      coarse_hopp_PRECISION_vectorized( leta+m*k, lphi+m*j, Dplus + 4*vectorized_link_offset*k, l );
-      // daggered hopp
-      coarse_hopp_PRECISION_vectorized( leta+m*j, lphi+m*k, Dminus + 4*vectorized_link_offset*k, l );
-    }
-  }
-
-  END_UNTHREADED_FUNCTION(threading)
-}
 #endif
-
-#ifdef VECTORIZE_COARSE_OPERATOR_PRECISION
-void apply_coarse_operator_PRECISION( vector_PRECISION eta, vector_PRECISION phi, operator_PRECISION_struct *op,
-                                      level_struct *l, struct Thread *threading ) {
-  
-  PROF_PRECISION_START( _SC, threading );
-  SYNC_CORES(threading)
-  int start;
-  int end;
-  compute_core_start_end_custom(0, l->num_inner_lattice_sites, &start, &end, l, threading, 1);
-  coarse_self_couplings_PRECISION_vectorized( eta, phi, op->clover_vectorized, start, end, l );
-  SYNC_CORES(threading)
-  PROF_PRECISION_STOP( _SC, 1, threading );
-  PROF_PRECISION_START( _NC, threading );
-  coarse_hopping_term_PRECISION( eta, phi, op, _FULL_SYSTEM, l, threading );
-  PROF_PRECISION_STOP( _NC, 1, threading );
-}
-#endif
-
-#endif // SSE

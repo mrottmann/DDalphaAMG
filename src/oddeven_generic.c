@@ -397,7 +397,7 @@ void diag_ee_PRECISION( vector_PRECISION y, vector_PRECISION x, operator_PRECISI
          ( op->epsbar != 0 || op->epsbar_ig5_odd_shift != 0 || op->epsbar_ig5_odd_shift != 0 ) )
       apply_doublet_coupling_PRECISION( x, y, epsbar_term, end-start );
 #else 
-    config_PRECISION sc = op->clover_doublet + (start/24)*288;
+    config_PRECISION sc = op->clover_doublet_oo_inv + (start/24)*288;
     // diagonal blocks applied to the even sites
     for ( int i=start; i<end; i+=24 ) {
       LU_multiply_PRECISION( y, x, sc );
@@ -451,7 +451,7 @@ void diag_ee_inv_PRECISION( vector_PRECISION y, vector_PRECISION x, operator_PRE
 #ifdef HAVE_TM1p1
   if( g.n_flavours == 2) {
     int i, n1 = op->num_even_sites;
-    config_PRECISION sc = op->clover_doublet;
+    config_PRECISION sc = op->clover_doublet_oo_inv;
     // diagonal blocks applied to the even sites
     for ( i=0; i<n1; i++ ) {
         LU_perform_fwd_bwd_subs_PRECISION( y, x, sc );
@@ -498,7 +498,7 @@ void diag_oo_PRECISION( vector_PRECISION y, vector_PRECISION x, operator_PRECISI
 #ifdef HAVE_TM1p1
   if( g.n_flavours == 2) {
     int i, n1 = op->num_even_sites, n2 = op->num_odd_sites;
-    config_PRECISION sc = op->clover_doublet + n1*288;
+    config_PRECISION sc = op->clover_doublet_oo_inv + n1*288;
     x += n1*24; y += n1*24;
     // diagonal blocks applied to the even sites
     for ( i=0; i<n2; i++ ) {
@@ -555,7 +555,7 @@ void diag_oo_inv_PRECISION( vector_PRECISION y, vector_PRECISION x, operator_PRE
       y_pt+=2*24; x_pt+=2*24; sc_pt+=2*288;
     }
 #else
-    config_PRECISION sc = op->clover_doublet + (start/24)*288;
+    config_PRECISION sc = op->clover_doublet_oo_inv + (start/24)*288;
     for ( int i=start; i<end; i+=24 ) {
       LU_perform_fwd_bwd_subs_PRECISION( y, x, sc );
       y+=24; x+=24; sc+=288;
@@ -614,14 +614,12 @@ void oddeven_setup_PRECISION( operator_double_struct *in, level_struct *l ) {
   operator_PRECISION_struct *op = &(l->oe_op_PRECISION);
 
   op->m0 = in->m0;
+
+#ifdef HAVE_TM
   op->mu = in->mu;
   op->mu_even_shift = in->mu_even_shift;
   op->mu_odd_shift = in->mu_odd_shift;
-  op->epsbar = in->epsbar;
-  op->epsbar_ig5_even_shift = in->epsbar_ig5_even_shift;
-  op->epsbar_ig5_odd_shift = in->epsbar_ig5_odd_shift;
 
-#ifdef HAVE_TM
   lu_dec_size = 72;
   config_double tm_term_in = in->tm_term;
 #endif
@@ -742,12 +740,18 @@ void oddeven_setup_PRECISION( operator_double_struct *in, level_struct *l ) {
 
   int lu_doublet_dec_size = 288;
   config_double eps_term_in = in->epsbar_term;
-  sc_in = in->clover; tm_term_in = in->tm_term;
+  sc_in = in->clover; 
+#ifdef HAVE_TM
+  tm_term_in = in->tm_term;
+#endif
+  op->epsbar = in->epsbar;
+  op->epsbar_ig5_even_shift = in->epsbar_ig5_even_shift;
+  op->epsbar_ig5_odd_shift = in->epsbar_ig5_odd_shift;
     
   // re-order clover term (i.e., self coupling)
-  MALLOC( op->clover_doublet, complex_PRECISION, lu_doublet_dec_size*n );
-  Aee = op->clover_doublet;
-  Aoo = op->clover_doublet + op->num_even_sites*lu_doublet_dec_size;
+  MALLOC( op->clover_doublet_oo_inv, complex_PRECISION, lu_doublet_dec_size*n );
+  Aee = op->clover_doublet_oo_inv;
+  Aoo = op->clover_doublet_oo_inv + op->num_even_sites*lu_doublet_dec_size;
 #ifdef OPTIMIZED_SELF_COUPLING_PRECISION
   MALLOC_HUGEPAGES( op->clover_doublet_vectorized, PRECISION, l->num_inner_lattice_sites*2*4*36, 4*SIMD_LENGTH_PRECISION );
   MALLOC_HUGEPAGES( op->clover_doublet_oo_inv_vectorized, PRECISION, op->num_odd_sites*2*2*144, 4*SIMD_LENGTH_PRECISION );
@@ -978,7 +982,7 @@ void oddeven_free_PRECISION( level_struct *l ) {
   FREE( l->oe_op_PRECISION.buffer, complex_PRECISION*, 2 );
 #ifdef HAVE_TM1p1
   FREE( l->oe_op_PRECISION.prnT, complex_PRECISION, 2*(l->num_lattice_site_var/2)*l->num_lattice_sites*8 );
-  FREE( l->oe_op_PRECISION.clover_doublet, complex_PRECISION, 288*n );
+  FREE( l->oe_op_PRECISION.clover_doublet_oo_inv, complex_PRECISION, 288*n );
 #else
   FREE( l->oe_op_PRECISION.prnT, complex_PRECISION, (l->num_lattice_site_var/2)*l->num_lattice_sites*8 );
 #endif
@@ -1803,9 +1807,14 @@ void block_diag_oo_PRECISION( vector_PRECISION eta, vector_PRECISION phi,
 #endif
     } else {
       config_PRECISION clover = s->op.clover+n1*12+start;
+#ifndef HAVE_TM
+      for ( i=0; i<12*n2; i++ )
+        leta[i] = lphi[i]*(clover[i]);
+#else
       config_PRECISION tm_term = s->op.tm_term+n1*12+start;
       for ( i=0; i<12*n2; i++ )
         leta[i] = lphi[i]*(clover[i]+tm_term[i]);
+#endif
     }
 #ifdef HAVE_TM1p1
   }
@@ -1871,9 +1880,14 @@ void block_diag_oo_inv_PRECISION( vector_PRECISION eta, vector_PRECISION phi, in
 #endif
     } else {
       config_PRECISION clover = s->op.clover+n1*12+start;
+#ifndef HAVE_TM
+      for ( i=0; i<12*n2; i++ )
+        leta[i] = lphi[i]/(clover[i]);
+#else
       config_PRECISION tm_term = s->op.tm_term+n1*12+start;
       for ( i=0; i<12*n2; i++ )
         leta[i] = lphi[i]/(clover[i]+tm_term[i]);
+#endif
     }
 #ifdef HAVE_TM1p1
   }

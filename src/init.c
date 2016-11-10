@@ -403,18 +403,20 @@ void method_update( int setup_iter, level_struct *l, struct Thread *threading ) 
       prof_init( l );
     END_LOCKED_MASTER(threading)
 
-    START_MASTER(threading)
-    t0 = MPI_Wtime();
-    END_MASTER(threading)
+    MASTER(threading)
+      t0 = MPI_Wtime();
     
-    if ( g.setup_m0 != g.m0 )
+    if ( g.setup_m0 != g.m0 ) {
       m0_update( (complex_double)g.setup_m0, l, threading );
 #ifdef HAVE_TM
-    if ( g.setup_mu != g.mu )
+    }
+    if ( g.setup_mu != g.mu ) {
       tm_term_update( (complex_double)g.setup_mu, l, threading );
-#endif
-    if ( g.setup_m0 != g.m0 || g.setup_mu != g.mu )
       finalize_operator_update( l, threading );
+    } else if (g.setup_m0 != g.m0) {
+#endif
+      finalize_operator_update( l, threading );
+    }
     
     if ( g.mixed_precision )
       iterative_float_setup( setup_iter, l, threading );
@@ -422,21 +424,24 @@ void method_update( int setup_iter, level_struct *l, struct Thread *threading ) 
       iterative_double_setup( setup_iter, l, threading );
 
     
-    if ( g.setup_m0 != g.m0 )
+    if ( g.setup_m0 != g.m0 ) {
       m0_update( (complex_double)g.m0, l, threading );
 #ifdef HAVE_TM
-    if ( g.setup_mu != g.mu )
+    }
+    if ( g.setup_mu != g.mu ) {
       tm_term_update( (complex_double)g.mu, l, threading );
-#endif
-    if ( g.setup_m0 != g.m0 || g.setup_mu != g.mu )
       finalize_operator_update( l, threading );
+    } else if (g.setup_m0 != g.m0) {
+#endif
+      finalize_operator_update( l, threading );
+    }
 
-    START_MASTER(threading)
-    t1 = MPI_Wtime();
-    g.total_time = t1-t0;
-    printf0("\nperformed %d iterative setup steps\n", setup_iter );
-    printf0("elapsed time: %lf seconds (%lf seconds on coarse grid)\n\n", t1-t0, g.coarse_time );
-    END_MASTER(threading)
+    MASTER(threading) {
+      t1 = MPI_Wtime();
+      g.total_time = t1-t0;
+      printf0("\nperformed %d iterative setup steps\n", setup_iter );
+      printf0("elapsed time: %lf seconds (%lf seconds on coarse grid)\n\n", t1-t0, g.coarse_time );
+    }
     
     START_LOCKED_MASTER(threading)
     g.in_setup = 0;

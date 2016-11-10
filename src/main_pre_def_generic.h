@@ -64,7 +64,7 @@
 #endif
 #ifdef HAVE_TM1p1
     double epsbar, epsbar_ig5_odd_shift, epsbar_ig5_even_shift;
-    config_PRECISION epsbar_term, clover_doublet, clover_doublet_oo_inv;
+    config_PRECISION epsbar_term, clover_doublet_oo_inv;
     OPERATOR_TYPE_PRECISION *clover_doublet_vectorized;
     OPERATOR_TYPE_PRECISION *clover_doublet_oo_inv_vectorized;
 #endif
