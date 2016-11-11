@@ -134,7 +134,6 @@ static inline void sse_cgemv( const int N, const OPERATOR_TYPE_float *A, int lda
   }
 }
 
-
 static inline void sse_cgenmv( const int N, const OPERATOR_TYPE_float *A,  int lda, const float *B, float *C ) {
   int i, j;
   
@@ -170,6 +169,212 @@ static inline void sse_cgenmv( const int N, const OPERATOR_TYPE_float *A,  int l
      _mm_store_ps( C+2*i,                   A_re );
      _mm_store_ps( C+2*i+SIMD_LENGTH_float, A_im );
   }
+}
+
+static inline void sse_cgemv_padded( const int N, const OPERATOR_TYPE_float *A, int lda, int padded, const float *B, float *C ) {
+  int i, j, ip;
+
+  int offset = SIMD_LENGTH_float*((padded+SIMD_LENGTH_float-1)/SIMD_LENGTH_float);
+#ifdef HAVE_TM1p1
+  if( g.n_flavours == 2 ) {
+    int jp;
+    __m128 A_re;
+    __m128 A_im;
+    __m128 B1_re;
+    __m128 B1_im;
+    __m128 B2_re;
+    __m128 B2_im;
+    __m128 C1_re[lda/SIMD_LENGTH_float];
+    __m128 C1_im[lda/SIMD_LENGTH_float];
+    __m128 C2_re[lda/SIMD_LENGTH_float];
+    __m128 C2_im[lda/SIMD_LENGTH_float];
+    
+    // deinterleaved load
+    for ( i=0; i<lda; i+= SIMD_LENGTH_float ) {
+      ip = i%offset + 2*(i/offset)*padded;
+      C1_re[i/SIMD_LENGTH_float] = _mm_setr_ps(C[2*ip], C[2*ip+2], C[2*ip+4], C[2*ip+6] );
+      C1_im[i/SIMD_LENGTH_float] = _mm_setr_ps(C[2*ip+1], C[2*ip+3], C[2*ip+5], C[2*ip+7] );
+      C2_re[i/SIMD_LENGTH_float] = _mm_setr_ps(C[2*(ip+padded)], C[2*(ip+padded)+2], C[2*(ip+padded)+4], C[2*(ip+padded)+6] );
+      C2_im[i/SIMD_LENGTH_float] = _mm_setr_ps(C[2*(ip+padded)+1], C[2*(ip+padded)+3], C[2*(ip+padded)+5], C[2*(ip+padded)+7] );
+    }
+    
+    for ( j=0; j<N; j++ ) {
+      // load the j-th complex number in B
+      jp = j + (j/padded)*padded;
+      B1_re = _mm_set1_ps( B[2*jp] );
+      B1_im = _mm_set1_ps( B[2*jp+1] );
+      B2_re = _mm_set1_ps( B[2*(jp+padded)] );
+      B2_im = _mm_set1_ps( B[2*(jp+padded)+1] );
+      
+      for ( i=0; i<lda; i+= SIMD_LENGTH_float ) {
+        A_re = _mm_load_ps( A + 2*j*lda + i );
+        A_im = _mm_load_ps( A + (2*j+1)*lda + i );
+        
+        // C += A*B
+        cfmadd(A_re, A_im, B1_re, B1_im, &(C1_re[i/SIMD_LENGTH_float]), &(C1_im[i/SIMD_LENGTH_float]) );
+        cfmadd(A_re, A_im, B2_re, B2_im, &(C2_re[i/SIMD_LENGTH_float]), &(C2_im[i/SIMD_LENGTH_float]) );
+      }
+    }  
+    
+    // interleaves real and imaginary parts and stores the resulting complex numbers in C
+    for ( j=0; j<lda/offset; j++ ) {
+      // we save it from last to first in order to avoid overriting issues.
+      for ( i = (j+1)*offset-SIMD_LENGTH_float; i >= j*offset; i -= SIMD_LENGTH_float ) {
+        ip = i%offset + 2*(i/offset)*padded;
+        A_re = _mm_unpacklo_ps( C1_re[i/SIMD_LENGTH_float], C1_im[i/SIMD_LENGTH_float] );
+        A_im = _mm_unpackhi_ps( C1_re[i/SIMD_LENGTH_float], C1_im[i/SIMD_LENGTH_float] );
+        _mm_store_ps( C+2*ip,                   A_re );
+        _mm_store_ps( C+2*ip+SIMD_LENGTH_float, A_im );
+        A_re = _mm_unpacklo_ps( C2_re[i/SIMD_LENGTH_float], C2_im[i/SIMD_LENGTH_float] );
+        A_im = _mm_unpackhi_ps( C2_re[i/SIMD_LENGTH_float], C2_im[i/SIMD_LENGTH_float] );
+        _mm_store_ps( C+2*(ip+padded),                   A_re );
+        _mm_store_ps( C+2*(ip+padded)+SIMD_LENGTH_float, A_im );
+      }
+    }
+  } else {
+#endif
+    __m128 A_re;
+    __m128 A_im;
+    __m128 B_re;
+    __m128 B_im;
+    __m128 C_re[lda/SIMD_LENGTH_float];
+    __m128 C_im[lda/SIMD_LENGTH_float];
+    
+    // deinterleaved load
+    for ( i=0; i<lda; i+= SIMD_LENGTH_float ) {
+      ip = i%offset + (i/offset)*padded;
+      C_re[i/SIMD_LENGTH_float] = _mm_setr_ps(C[2*ip], C[2*ip+2], C[2*ip+4], C[2*ip+6] );
+      C_im[i/SIMD_LENGTH_float] = _mm_setr_ps(C[2*ip+1], C[2*ip+3], C[2*ip+5], C[2*ip+7] );
+    }
+    
+    for ( j=0; j<N; j++ ) {
+      // load the j-th complex number in B
+      B_re = _mm_set1_ps( B[2*j] );
+      B_im = _mm_set1_ps( B[2*j+1] );
+      
+      for ( i=0; i<lda; i+= SIMD_LENGTH_float ) {
+        A_re = _mm_load_ps( A + 2*j*lda + i );
+        A_im = _mm_load_ps( A + (2*j+1)*lda + i );
+        
+        // C += A*B
+        cfmadd(A_re, A_im, B_re, B_im, &(C_re[i/SIMD_LENGTH_float]), &(C_im[i/SIMD_LENGTH_float]) );
+      }
+    }  
+    
+    // interleaves real and imaginary parts and stores the resulting complex numbers in C
+    for ( i=0; i<lda; i+= SIMD_LENGTH_float ) {
+      ip = i%offset + (i/offset)*padded;
+      A_re = _mm_unpacklo_ps( C_re[i/SIMD_LENGTH_float], C_im[i/SIMD_LENGTH_float] );
+      A_im = _mm_unpackhi_ps( C_re[i/SIMD_LENGTH_float], C_im[i/SIMD_LENGTH_float] );
+      _mm_store_ps( C+2*ip,                   A_re );
+      _mm_store_ps( C+2*ip+SIMD_LENGTH_float, A_im );
+    }
+#ifdef HAVE_TM1p1
+  }
+#endif
+}
+
+static inline void sse_cgenmv_padded( const int N, const OPERATOR_TYPE_float *A, int lda, int padded, const float *B, float *C ) {
+  int i, j, ip;
+
+  int offset = SIMD_LENGTH_float*((padded+SIMD_LENGTH_float-1)/SIMD_LENGTH_float);
+#ifdef HAVE_TM1p1
+  if( g.n_flavours == 2 ) {
+    int jp;
+    __m128 A_re;
+    __m128 A_im;
+    __m128 B1_re;
+    __m128 B1_im;
+    __m128 B2_re;
+    __m128 B2_im;
+    __m128 C1_re[lda/SIMD_LENGTH_float];
+    __m128 C1_im[lda/SIMD_LENGTH_float];
+    __m128 C2_re[lda/SIMD_LENGTH_float];
+    __m128 C2_im[lda/SIMD_LENGTH_float];
+    
+    // deinterleaved load
+    for ( i=0; i<lda; i+= SIMD_LENGTH_float ) {
+      ip = i%offset + 2*(i/offset)*padded;
+      C1_re[i/SIMD_LENGTH_float] = _mm_setr_ps(C[2*ip], C[2*ip+2], C[2*ip+4], C[2*ip+6] );
+      C1_im[i/SIMD_LENGTH_float] = _mm_setr_ps(C[2*ip+1], C[2*ip+3], C[2*ip+5], C[2*ip+7] );
+      C2_re[i/SIMD_LENGTH_float] = _mm_setr_ps(C[2*(ip+padded)], C[2*(ip+padded)+2], C[2*(ip+padded)+4], C[2*(ip+padded)+6] );
+      C2_im[i/SIMD_LENGTH_float] = _mm_setr_ps(C[2*(ip+padded)+1], C[2*(ip+padded)+3], C[2*(ip+padded)+5], C[2*(ip+padded)+7] );
+    }
+    
+    for ( j=0; j<N; j++ ) {
+      // load the j-th complex number in B
+      jp = j + (j/padded)*padded;
+      B1_re = _mm_set1_ps( B[2*jp] );
+      B1_im = _mm_set1_ps( B[2*jp+1] );
+      B2_re = _mm_set1_ps( B[2*(jp+padded)] );
+      B2_im = _mm_set1_ps( B[2*(jp+padded)+1] );
+      
+      for ( i=0; i<lda; i+= SIMD_LENGTH_float ) {
+        A_re = _mm_load_ps( A + 2*j*lda + i );
+        A_im = _mm_load_ps( A + (2*j+1)*lda + i );
+        
+        // C += A*B
+        cfnmadd(A_re, A_im, B1_re, B1_im, &(C1_re[i/SIMD_LENGTH_float]), &(C1_im[i/SIMD_LENGTH_float]) );
+        cfnmadd(A_re, A_im, B2_re, B2_im, &(C2_re[i/SIMD_LENGTH_float]), &(C2_im[i/SIMD_LENGTH_float]) );
+      }
+    }  
+    
+    // interleaves real and imaginary parts and stores the resulting complex numbers in C
+    for ( j=0; j<lda/offset; j++ ) {
+      // we save it from last to first in order to avoid overriting issues.
+      for ( i = (j+1)*offset-SIMD_LENGTH_float; i >= j*offset; i -= SIMD_LENGTH_float ) {
+        ip = i%offset + 2*(i/offset)*padded;
+        A_re = _mm_unpacklo_ps( C1_re[i/SIMD_LENGTH_float], C1_im[i/SIMD_LENGTH_float] );
+        A_im = _mm_unpackhi_ps( C1_re[i/SIMD_LENGTH_float], C1_im[i/SIMD_LENGTH_float] );
+        _mm_store_ps( C+2*ip,                   A_re );
+        _mm_store_ps( C+2*ip+SIMD_LENGTH_float, A_im );
+        A_re = _mm_unpacklo_ps( C2_re[i/SIMD_LENGTH_float], C2_im[i/SIMD_LENGTH_float] );
+        A_im = _mm_unpackhi_ps( C2_re[i/SIMD_LENGTH_float], C2_im[i/SIMD_LENGTH_float] );
+        _mm_store_ps( C+2*(ip+padded),                   A_re );
+        _mm_store_ps( C+2*(ip+padded)+SIMD_LENGTH_float, A_im );
+      }
+    }
+  } else {
+#endif
+    __m128 A_re;
+    __m128 A_im;
+    __m128 B_re;
+    __m128 B_im;
+    __m128 C_re[lda/SIMD_LENGTH_float];
+    __m128 C_im[lda/SIMD_LENGTH_float];
+    
+    // deinterleaved load
+    for ( i=0; i<lda; i+= SIMD_LENGTH_float ) {
+      ip = i%offset + (i/offset)*padded;
+      C_re[i/SIMD_LENGTH_float] = _mm_setr_ps(C[2*ip], C[2*ip+2], C[2*ip+4], C[2*ip+6] );
+      C_im[i/SIMD_LENGTH_float] = _mm_setr_ps(C[2*ip+1], C[2*ip+3], C[2*ip+5], C[2*ip+7] );
+    }
+    
+    for ( j=0; j<N; j++ ) {
+      // load the j-th complex number in B
+      B_re = _mm_set1_ps( B[2*j] );
+      B_im = _mm_set1_ps( B[2*j+1] );
+      
+      for ( i=0; i<lda; i+= SIMD_LENGTH_float ) {
+        A_re = _mm_load_ps( A + 2*j*lda + i );
+        A_im = _mm_load_ps( A + (2*j+1)*lda + i );
+        
+        // C += A*B
+        cfnmadd(A_re, A_im, B_re, B_im, &(C_re[i/SIMD_LENGTH_float]), &(C_im[i/SIMD_LENGTH_float]) );
+      }
+    }  
+    
+    // interleaves real and imaginary parts and stores the resulting complex numbers in C
+    for ( i=0; i<lda; i+= SIMD_LENGTH_float ) {
+      ip = i%offset + (i/offset)*padded;
+      A_re = _mm_unpacklo_ps( C_re[i/SIMD_LENGTH_float], C_im[i/SIMD_LENGTH_float] );
+      A_im = _mm_unpackhi_ps( C_re[i/SIMD_LENGTH_float], C_im[i/SIMD_LENGTH_float] );
+      _mm_store_ps( C+2*ip,                   A_re );
+      _mm_store_ps( C+2*ip+SIMD_LENGTH_float, A_im );
+    }
+#ifdef HAVE_TM1p1
+  }
+#endif
 }
 
 #endif

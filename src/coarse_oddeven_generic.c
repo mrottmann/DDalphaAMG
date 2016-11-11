@@ -931,8 +931,8 @@ void coarse_hopping_term_PRECISION_vectorized( vector_PRECISION out, vector_PREC
   vector_PRECISION in_pt, out_pt;
 
   OPERATOR_TYPE_PRECISION *D_vectorized;
-  int column_offset = SIMD_LENGTH_PRECISION*((l->num_lattice_site_var+SIMD_LENGTH_PRECISION-1)/SIMD_LENGTH_PRECISION);
-  int vectorized_link_offset = 2*l->num_lattice_site_var*column_offset;
+  int column_offset = 2*SIMD_LENGTH_PRECISION*((l->num_parent_eig_vect+SIMD_LENGTH_PRECISION-1)/SIMD_LENGTH_PRECISION);
+  int vectorized_link_offset = 2*2*l->num_parent_eig_vect*column_offset;
 
   int core_start;
   int core_end;
@@ -1071,8 +1071,8 @@ void coarse_pn_hopping_term_PRECISION_vectorized( vector_PRECISION out, vector_P
   vector_PRECISION in_pt, out_pt;
 
   OPERATOR_TYPE_PRECISION *D_vectorized;
-  int column_offset = SIMD_LENGTH_PRECISION*((l->num_lattice_site_var+SIMD_LENGTH_PRECISION-1)/SIMD_LENGTH_PRECISION);
-  int link_offset = 2*l->num_lattice_site_var*column_offset;
+  int column_offset = 2*SIMD_LENGTH_PRECISION*((l->num_parent_eig_vect+SIMD_LENGTH_PRECISION-1)/SIMD_LENGTH_PRECISION);
+  int link_offset = 2*2*l->num_parent_eig_vect*column_offset;
   int *neighbor_fw = op->neighbor_table;
   int *neighbor_bw = op->backward_neighbor_table;
 
@@ -1197,8 +1197,8 @@ void coarse_n_hopping_term_PRECISION_vectorized( vector_PRECISION out, vector_PR
   vector_PRECISION in_pt, out_pt;
 
   OPERATOR_TYPE_PRECISION *D_vectorized;
-  int column_offset = SIMD_LENGTH_PRECISION*((l->num_lattice_site_var+SIMD_LENGTH_PRECISION-1)/SIMD_LENGTH_PRECISION);
-  int vectorized_link_offset = 2*l->num_lattice_site_var*column_offset;
+  int column_offset = 2*SIMD_LENGTH_PRECISION*((l->num_parent_eig_vect+SIMD_LENGTH_PRECISION-1)/SIMD_LENGTH_PRECISION);
+  int vectorized_link_offset = 2*2*l->num_parent_eig_vect*column_offset;
 
   int core_start;
   int core_end;

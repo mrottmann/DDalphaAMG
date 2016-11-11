@@ -1119,6 +1119,9 @@ void validate_parameters( int ls, level_struct *l ) {
       if ( g.block_lattice[i][mu] != g.global_lattice[i][mu]/g.global_lattice[i+1][mu] )
         warning0("when using SSE, Schwarz block size and aggregate size have to match.\n");
       ASSERT( g.block_lattice[i][mu] == g.global_lattice[i][mu]/g.global_lattice[i+1][mu] );
+      // it works everywhere but we have some problem with the vector size.
+      // TODO: check all vectora allocated with size l->inner_vector_size
+      ASSERT( g.num_eig_vect[i] % SIMD_LENGTH_float == 0 );
 #endif
     }
     

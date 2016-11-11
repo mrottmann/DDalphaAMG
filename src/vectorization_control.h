@@ -27,9 +27,7 @@
 #define SIMD_LENGTH_float 4
 #define SIMD_LENGTH_double 2
 
-#ifndef HAVE_TM1p1 // TODO: make it work for TM
 #define OPTIMIZED_COARSE_NEIGHBOR_COUPLING_float
-#endif
 #define OPTIMIZED_COARSE_SELF_COUPLING_float
 #define INTERPOLATION_OPERATOR_LAYOUT_OPTIMIZED_float
 #define INTERPOLATION_SETUP_LAYOUT_OPTIMIZED_float

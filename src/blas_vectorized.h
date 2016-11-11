@@ -43,6 +43,22 @@ static inline void cgenmv(const int N, const OPERATOR_TYPE_float *A, int lda, co
 #endif
 }
 
+// C=A*B+C with padded layout
+static inline void cgemv_padded(const int N, const OPERATOR_TYPE_float *A, int lda, int padded, const float *B, float *C)
+{
+#ifdef SSE
+  sse_cgemv_padded( N, A, lda, padded, B, C );
+#endif
+}
+
+// C=-A*B+C with padded layout
+static inline void cgenmv_padded(const int N, const OPERATOR_TYPE_float *A, int lda, int padded, const float *B, float *C)
+{
+#ifdef SSE
+  sse_cgenmv_padded( N, A, lda, padded, B, C );
+#endif
+}
+
 
 static inline void cgem_inverse(const int N, OPERATOR_TYPE_float *A_inverse, OPERATOR_TYPE_float *A, int lda)
 {

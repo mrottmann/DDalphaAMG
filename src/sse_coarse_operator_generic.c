@@ -420,24 +420,26 @@ void set_coarse_block_diagonal_PRECISION_vectorized_finalize( level_struct *l, i
   }
 }
 
-void copy_coarse_operator_to_vectorized_layout_PRECISION( config_PRECISION D,                                              
+void copy_coarse_operator_to_vectorized_layout_PRECISION( config_PRECISION D,
                                                           OPERATOR_TYPE_PRECISION *D_vectorized, 
                                                           int num_aggregates, int num_eig_vect) {
 
   int vecs = num_eig_vect;
   // in vectorized layout D is stored column wise, but not split into ABCD
   // each column is padded, such that next column can also start at 64B boundary
-  int column_offset = SIMD_LENGTH_PRECISION*((2*num_eig_vect+SIMD_LENGTH_PRECISION-1)/SIMD_LENGTH_PRECISION);
+  int half_offset = SIMD_LENGTH_PRECISION*((vecs+SIMD_LENGTH_PRECISION-1)/SIMD_LENGTH_PRECISION);
+  int column_offset = 2*half_offset;
   // offset between blocks in D
   int block_offset = vecs*vecs;
 
   PRECISION *out_tmp = D_vectorized;
 
-  // we zero out the padded area to avoid potential floating-point errors
+  // we zero out the padded area (o) to avoid potential floating-point errors
   // D_vectorized is
   // AB
+  // oo
   // CD
-  // 00
+  // oo
   // (column wise, size of zeros such that columns length is multiple of 64B)
 
   // 4 directions
@@ -448,13 +450,15 @@ void copy_coarse_operator_to_vectorized_layout_PRECISION( config_PRECISION D,
         out_tmp[(2*i+0)*column_offset + j] = creal(D[0*block_offset + i*vecs+j]);
         out_tmp[(2*i+1)*column_offset + j] = cimag(D[0*block_offset + i*vecs+j]);
         // C
-        out_tmp[(2*i+0)*column_offset + j + vecs] = creal(D[1*block_offset + i*vecs+j]);
-        out_tmp[(2*i+1)*column_offset + j + vecs] = cimag(D[1*block_offset + i*vecs+j]);
+        out_tmp[(2*i+0)*column_offset + j + half_offset] = creal(D[1*block_offset + i*vecs+j]);
+        out_tmp[(2*i+1)*column_offset + j + half_offset] = cimag(D[1*block_offset + i*vecs+j]);
       }
       // zero
-      for(int j=2*vecs; j<column_offset; j++) {
+      for(int j=vecs; j<half_offset; j++) {
         out_tmp[(2*i+0)*column_offset + j] = 0.0;
         out_tmp[(2*i+1)*column_offset + j] = 0.0;
+        out_tmp[(2*i+0)*column_offset + j + half_offset] = 0.0;
+        out_tmp[(2*i+1)*column_offset + j + half_offset] = 0.0;
       }
     }
 
@@ -464,13 +468,15 @@ void copy_coarse_operator_to_vectorized_layout_PRECISION( config_PRECISION D,
         out_tmp[(2*(i+vecs)+0)*column_offset + j] = creal(D[2*block_offset + i*vecs+j]);
         out_tmp[(2*(i+vecs)+1)*column_offset + j] = cimag(D[2*block_offset + i*vecs+j]);
         // D
-        out_tmp[(2*(i+vecs)+0)*column_offset + j + vecs] = creal(D[3*block_offset + i*vecs+j]);
-        out_tmp[(2*(i+vecs)+1)*column_offset + j + vecs] = cimag(D[3*block_offset + i*vecs+j]);
+        out_tmp[(2*(i+vecs)+0)*column_offset + j + half_offset] = creal(D[3*block_offset + i*vecs+j]);
+        out_tmp[(2*(i+vecs)+1)*column_offset + j + half_offset] = cimag(D[3*block_offset + i*vecs+j]);
       }
       // zero
-      for(int j=2*vecs; j<column_offset; j++) {
+      for(int j=vecs; j<half_offset; j++) {
         out_tmp[(2*(i+vecs)+0)*column_offset + j] = 0.0;
         out_tmp[(2*(i+vecs)+1)*column_offset + j] = 0.0;
+        out_tmp[(2*(i+vecs)+0)*column_offset + j + half_offset] = 0.0;
+        out_tmp[(2*(i+vecs)+1)*column_offset + j + half_offset] = 0.0;
       }
     }
     D += 2*vecs*2*vecs;
@@ -488,7 +494,8 @@ void copy_coarse_operator_to_transformed_vectorized_layout_PRECISION(config_PREC
   // in vectorized layout D is stored column wise, but not split into ABCD
   // output is transposed
   // each column is padded, such that the next column can also start at 64bit boundary
-  int column_offset = SIMD_LENGTH_PRECISION*((2*num_eig_vect+SIMD_LENGTH_PRECISION-1)/SIMD_LENGTH_PRECISION);
+  int half_offset = SIMD_LENGTH_PRECISION*((vecs+SIMD_LENGTH_PRECISION-1)/SIMD_LENGTH_PRECISION);
+  int column_offset = 2*half_offset;
   // offset between blocks in D
   int block_offset = vecs*vecs;
 
@@ -497,8 +504,9 @@ void copy_coarse_operator_to_transformed_vectorized_layout_PRECISION(config_PREC
   // we zero out the padded area to avoid potential floating-point errors
   // D_vectorized is
   // A^T C^T
+  //  o   o
   // B^T D^T
-  //  0   0
+  //  o   o
   // (column wise, size of zeros such that columns length is multiple of 64B)
 
   // 4 directions
@@ -509,13 +517,15 @@ void copy_coarse_operator_to_transformed_vectorized_layout_PRECISION(config_PREC
         out_tmp[(2*i+0)*column_offset + j] = creal(D[0*block_offset + j*vecs+i]);
         out_tmp[(2*i+1)*column_offset + j] = -cimag(D[0*block_offset + j*vecs+i]);
         // B
-        out_tmp[(2*i+0)*column_offset + j + vecs] = -creal(D[2*block_offset + j*vecs+i]);
-        out_tmp[(2*i+1)*column_offset + j + vecs] = cimag(D[2*block_offset + j*vecs+i]);
+        out_tmp[(2*i+0)*column_offset + j + half_offset] = -creal(D[2*block_offset + j*vecs+i]);
+        out_tmp[(2*i+1)*column_offset + j + half_offset] = cimag(D[2*block_offset + j*vecs+i]);
       }
       // zero
-      for(int j=2*vecs; j<column_offset; j++) {
+      for(int j=vecs; j<half_offset; j++) {
         out_tmp[(2*i+0)*column_offset + j] = 0.0;
         out_tmp[(2*i+1)*column_offset + j] = 0.0;
+        out_tmp[(2*i+0)*column_offset + j + half_offset] = 0.0;
+        out_tmp[(2*i+1)*column_offset + j + half_offset] = 0.0;
       }
     }
 
@@ -525,13 +535,15 @@ void copy_coarse_operator_to_transformed_vectorized_layout_PRECISION(config_PREC
         out_tmp[(2*(i+vecs)+0)*column_offset + j] = -creal(D[1*block_offset + j*vecs+i]);
         out_tmp[(2*(i+vecs)+1)*column_offset + j] = cimag(D[1*block_offset + j*vecs+i]);
         // D
-        out_tmp[(2*(i+vecs)+0)*column_offset + j + vecs] = creal(D[3*block_offset + j*vecs+i]);
-        out_tmp[(2*(i+vecs)+1)*column_offset + j + vecs] = -cimag(D[3*block_offset + j*vecs+i]);
+        out_tmp[(2*(i+vecs)+0)*column_offset + j + half_offset] = creal(D[3*block_offset + j*vecs+i]);
+        out_tmp[(2*(i+vecs)+1)*column_offset + j + half_offset] = -cimag(D[3*block_offset + j*vecs+i]);
       }
       // zero
-      for(int j=2*vecs; j<column_offset; j++) {
+      for(int j=vecs; j<half_offset; j++) {
         out_tmp[(2*(i+vecs)+0)*column_offset + j] = 0.0;
         out_tmp[(2*(i+vecs)+1)*column_offset + j] = 0.0;
+        out_tmp[(2*(i+vecs)+0)*column_offset + j + half_offset] = 0.0;
+        out_tmp[(2*(i+vecs)+1)*column_offset + j + half_offset] = 0.0;
       }
     }
     D += 2*vecs*2*vecs;
