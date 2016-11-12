@@ -480,20 +480,20 @@ void coarse_oddeven_alloc_PRECISION( level_struct *l ) {
             op->num_even_sites++;
           }
         }
-
+  
 #ifndef OPTIMIZED_COARSE_SELF_COUPLING_PRECISION
 
-  MALLOC( op->clover_oo_inv, complex_PRECISION, SQUARE(2*nv) );
+  MALLOC( op->clover_oo_inv, complex_PRECISION, SQUARE(2*nv)*op->num_odd_sites );
 #ifdef HAVE_TM1p1
-  MALLOC( op->clover_doublet_oo_inv, complex_PRECISION, SQUARE(4*nv) );
+  MALLOC( op->clover_doublet_oo_inv, complex_PRECISION, SQUARE(4*nv)*op->num_odd_sites );
 #endif
 
 #else
   int column_offset = SIMD_LENGTH_PRECISION*((2*nv+SIMD_LENGTH_PRECISION-1)/SIMD_LENGTH_PRECISION);
-  MALLOC_HUGEPAGES( op->clover_oo_inv_vectorized, PRECISION, 2*2*nv*column_offset, 4*SIMD_LENGTH_PRECISION );
+  MALLOC_HUGEPAGES( op->clover_oo_inv_vectorized, PRECISION, 2*2*nv*column_offset*op->num_odd_sites, 4*SIMD_LENGTH_PRECISION );
 #ifdef HAVE_TM1p1
   int column_doublet_offset = SIMD_LENGTH_PRECISION*((4*nv+SIMD_LENGTH_PRECISION-1)/SIMD_LENGTH_PRECISION);
-  MALLOC_HUGEPAGES( op->clover_doublet_oo_inv_vectorized, PRECISION, 2*4*nv*column_doublet_offset, 4*SIMD_LENGTH_PRECISION );
+  MALLOC_HUGEPAGES( op->clover_doublet_oo_inv_vectorized, PRECISION, 2*4*nv*column_doublet_offset*op->num_odd_sites, 4*SIMD_LENGTH_PRECISION );
 #endif
 
 #endif
@@ -611,17 +611,17 @@ void coarse_oddeven_free_PRECISION( level_struct *l ) {
 
 #ifndef OPTIMIZED_COARSE_SELF_COUPLING_PRECISION
 
-  FREE( op->clover_oo_inv, complex_PRECISION, SQUARE(2*nv) );
+  FREE( op->clover_oo_inv, complex_PRECISION, SQUARE(2*nv)*op->num_odd_sites );
 #ifdef HAVE_TM1p1
-  FREE( op->clover_doublet_oo_inv, complex_PRECISION, SQUARE(4*nv) );
+  FREE( op->clover_doublet_oo_inv, complex_PRECISION, SQUARE(4*nv)*op->num_odd_sites );
 #endif
 
 #else
   int column_offset = SIMD_LENGTH_PRECISION*((2*nv+SIMD_LENGTH_PRECISION-1)/SIMD_LENGTH_PRECISION);
-  FREE_HUGEPAGES( op->clover_oo_inv_vectorized, PRECISION, 2*2*nv*column_offset );
+  FREE_HUGEPAGES( op->clover_oo_inv_vectorized, PRECISION, 2*2*nv*column_offset*op->num_odd_sites );
 #ifdef HAVE_TM1p1
   int column_doublet_offset = SIMD_LENGTH_PRECISION*((4*nv+SIMD_LENGTH_PRECISION-1)/SIMD_LENGTH_PRECISION);
-  FREE_HUGEPAGES( op->clover_doublet_oo_inv_vectorized, PRECISION, 2*4*nv*column_doublet_offset );
+  FREE_HUGEPAGES( op->clover_doublet_oo_inv_vectorized, PRECISION, 2*4*nv*column_doublet_offset*op->num_odd_sites );
 #endif
 
 #endif
