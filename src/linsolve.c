@@ -368,7 +368,7 @@ void arnoldi_step_MP( vector_float *V, vector_float *Z, vector_float w,
   complex_float alpha[j+1];
   for( i=0; i<=j; i++ )
     alpha[i] = (complex_float) -H[j][i];
-  vector_float_multi_saxpy( w, V, alpha, 1, j+1, start, end, l );
+  vector_float_multi_saxpy( w, V, alpha, 1, j+1, p->v_start, p->v_end, l, threading );
   
   complex_double tmp2 = global_norm_MP( w, p->v_start, p->v_end, l, threading );
   START_MASTER(threading)
@@ -388,11 +388,6 @@ void compute_solution_MP( vector_float x, vector_float *V, complex_double *y,
   
   int i, k;
   // start and end indices for vector functions depending on thread
-  int start;
-  int end;
-  // compute start and end indices for core
-  // this puts zero for all other hyperthreads, so we can call functions below with all hyperthreads
-  compute_core_start_end(p->v_start, p->v_end, &start, &end, l, threading);
 
   START_MASTER(threading)
   
@@ -413,12 +408,12 @@ void compute_solution_MP( vector_float x, vector_float *V, complex_double *y,
   SYNC_MASTER_TO_ALL(threading)
   
   // x = V*y
-  vector_float_scale( x, V[0], (complex_float) y[0], start, end, l );
+    vector_float_scale( x, V[0], (complex_float) y[0], p->v_start, p->v_end, l, threading );
 
   complex_float alpha[j];
   for ( i=1; i<=j; i++ )
     alpha[i-1] = (complex_float) y[i];
-  vector_float_multi_saxpy( x, &(V[1]), alpha, 1, j, start, end, l );
+  vector_float_multi_saxpy( x, &(V[1]), alpha, 1, j, p->v_start, p->v_end, l, threading );
 }
 
 

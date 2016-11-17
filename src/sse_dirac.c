@@ -2881,8 +2881,8 @@ void sse_site_clover_invert_float( float *clover_in, float *clover_out ) {
     }
   }
   
-  sse_cgem_inverse( 6, M_tmp1, M_tmp1, 6 );  
-  sse_cgem_inverse( 6, M_tmp2, M_tmp2, 6 );
+  cgem_inverse_float( 6, M_tmp1, M_tmp1, 6 );  
+  cgem_inverse_float( 6, M_tmp2, M_tmp2, 6 );
   
   for ( int k=0; k<12; k+=SIMD_LENGTH_float ) {
     for ( int j=0; j<6; j++ ) {
@@ -2951,8 +2951,8 @@ void sse_site_clover_doublet_invert_float( float *clover_in, config_float eps_te
       M_tmp[288*n+24*(j+6)+j+12] = M_tmp[288*n+24*j+j+18] = cimag(eps_term[6*n+j]);
     }
   
-  sse_cgem_inverse( 12, M_tmp, M_tmp, 12 );  
-  sse_cgem_inverse( 12, M_tmp+288, M_tmp+288, 12 );
+  cgem_inverse_float( 12, M_tmp, M_tmp, 12 );  
+  cgem_inverse_float( 12, M_tmp+288, M_tmp+288, 12 );
   
   for ( int n=0; n<2; n++ )  
     for ( int k=0; k<12; k+=SIMD_LENGTH_float ) {

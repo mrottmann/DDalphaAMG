@@ -1188,7 +1188,7 @@ void operator_updates_PRECISION( level_struct *l, struct Thread *threading ) {
 
   if ( l->level > 0 ) {
     if ( !l->idle ) {
-#ifdef INTERPOLATION_SETUP_LAYOUT_OPTIMIZED_PRECISION
+#ifdef OPTIMIZED_INTERPOLATION_SETUP_PRECISION
       coarse_operator_PRECISION_setup_vectorized( l->is_PRECISION.operator, l, threading );
       START_LOCKED_MASTER(threading)
 #else
@@ -1475,8 +1475,8 @@ void two_flavours_test_PRECISION( operator_PRECISION_struct *op, level_struct *l
   
   START_LOCKED_MASTER(threading)
 
-  vector_double_define_random( vd1, 0, l->inner_vector_size, l );
-  vector_double_define_random( vd2, 0, l->inner_vector_size, l );
+  vector_double_define_random( vd1, 0, l->inner_vector_size, l, no_threading );
+  vector_double_define_random( vd2, 0, l->inner_vector_size, l, no_threading );
   apply_operator_double( vd3, vd1, &(g.p), l, no_threading );
 #ifdef HAVE_TM
   vector_double_real_scale( g.op_double.tm_term, g.op_double.tm_term, -1, 0, l->inner_vector_size, l ); 

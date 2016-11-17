@@ -236,9 +236,7 @@ void vcycle_timing_PRECISION( int n, level_struct *l, struct Thread *threading )
   PUBLIC_MALLOC( v1, complex_PRECISION, l->inner_vector_size );
   PUBLIC_MALLOC( v2, complex_PRECISION, l->inner_vector_size );
 
-  START_LOCKED_MASTER(threading)
-  vector_PRECISION_define_random( v2, 0, l->inner_vector_size, l );
-  END_LOCKED_MASTER(threading)
+  vector_PRECISION_define_random( v2, 0, l->inner_vector_size, l, threading );
   
   START_MASTER(threading)
   t0 = MPI_Wtime();

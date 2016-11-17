@@ -44,14 +44,14 @@ void compute_clover_term ( SU3_storage U, level_struct *l ) {
   
 #ifdef HAVE_TM
   if ( g.mu + g.mu_even_shift == 0 && g.mu + g.mu_odd_shift == 0 )
-    vector_double_define( op->tm_term, _COMPLEX_double_ZERO, 0, l->inner_vector_size, l );
+    vector_double_define_zero( op->tm_term, 0, l->inner_vector_size, l, no_threading );
   else
     tm_term_double_setup( g.mu, g.mu_even_shift, g.mu_odd_shift, op, l, no_threading );  
 #endif
 
 #ifdef HAVE_TM1p1
   if ( g.epsbar == 0 && g.epsbar_ig5_even_shift == 0 && g.epsbar_ig5_odd_shift == 0 ) 
-    vector_double_define( op->epsbar_term, _COMPLEX_double_ZERO, 0, l->inner_vector_size, l );
+    vector_double_define_zero( op->epsbar_term, 0, l->inner_vector_size, l, no_threading );
   else
     epsbar_term_double_setup( g.epsbar, g.epsbar_ig5_even_shift, g.epsbar_ig5_odd_shift, op, l, no_threading );  
 #endif
@@ -86,7 +86,7 @@ void compute_clover_term ( SU3_storage U, level_struct *l ) {
     mat_free( &Qstore, 3 );
     spin_free( 4, 4 );
   } else {
-    vector_double_define( op->clover, 4+op->m0, 0, l->inner_vector_size, l );
+    vector_double_define_real( op->clover, 4+op->m0, 0, l->inner_vector_size, l, no_threading );
   }
 }
 

@@ -1260,7 +1260,7 @@ void coarse_block_PRECISION_boundary_op( vector_PRECISION eta, vector_PRECISION 
       int neighbor_index = s->block[k].bt[i+1];
       vector_PRECISION phi_pt = phi + n*neighbor_index;
       vector_PRECISION eta_pt = eta + n*index;
-      coarse_hopp_PRECISION_vectorized( eta_pt, phi_pt, Dplus + 4*vectorized_link_offset*index, l );
+      coarse_pn_hopp_PRECISION_vectorized( eta_pt, phi_pt, Dplus + 4*vectorized_link_offset*index, +1, l );
     }
     // minus mu direction
     for ( int i=bbl[2*mu+1]; i<bbl[2*mu+2]; i+=2 ) {
@@ -1268,7 +1268,7 @@ void coarse_block_PRECISION_boundary_op( vector_PRECISION eta, vector_PRECISION 
       int neighbor_index = s->block[k].bt[i+1];
       vector_PRECISION phi_pt = phi + n*neighbor_index;
       vector_PRECISION eta_pt = eta + n*index;
-      coarse_hopp_PRECISION_vectorized( eta_pt, phi_pt, Dminus + 4*vectorized_link_offset*neighbor_index, l );
+      coarse_pn_hopp_PRECISION_vectorized( eta_pt, phi_pt, Dminus + 4*vectorized_link_offset*neighbor_index, +1, l );
     }
   }
 #else
@@ -1283,7 +1283,7 @@ void coarse_block_PRECISION_boundary_op( vector_PRECISION eta, vector_PRECISION 
       vector_PRECISION phi_pt = phi + n*neighbor_index;
       vector_PRECISION eta_pt = eta + n*index;
       config_PRECISION D_pt = D + site_size*index + link_size*mu;
-      coarse_hopp_PRECISION( eta_pt, phi_pt, D_pt, l );
+      coarse_pn_hopp_PRECISION( eta_pt, phi_pt, D_pt, +1, l );
     }
     // minus mu direction
     for ( int i=bbl[2*mu+1]; i<bbl[2*mu+2]; i+=2 ) {
@@ -1292,7 +1292,7 @@ void coarse_block_PRECISION_boundary_op( vector_PRECISION eta, vector_PRECISION 
       vector_PRECISION phi_pt = phi + n*neighbor_index;
       vector_PRECISION eta_pt = eta + n*index;
       config_PRECISION D_pt = D + site_size*neighbor_index + link_size*mu;
-      coarse_daggered_hopp_PRECISION( eta_pt, phi_pt, D_pt, l );
+      coarse_pn_daggered_hopp_PRECISION( eta_pt, phi_pt, D_pt, +1, l );
     }
   }
 #endif
@@ -1316,7 +1316,7 @@ void n_coarse_block_PRECISION_boundary_op( vector_PRECISION eta, vector_PRECISIO
       int neighbor_index = s->block[k].bt[i+1];
       vector_PRECISION phi_pt = phi + n*neighbor_index;
       vector_PRECISION eta_pt = eta + n*index;
-      coarse_n_hopp_PRECISION_vectorized( eta_pt, phi_pt, Dplus + 4*vectorized_link_offset*index, l );
+      coarse_pn_hopp_PRECISION_vectorized( eta_pt, phi_pt, Dplus + 4*vectorized_link_offset*index, -1, l );
     }
     // minus mu direction
     for ( int i=bbl[2*mu+1]; i<bbl[2*mu+2]; i+=2 ) {
@@ -1324,7 +1324,7 @@ void n_coarse_block_PRECISION_boundary_op( vector_PRECISION eta, vector_PRECISIO
       int neighbor_index = s->block[k].bt[i+1];
       vector_PRECISION phi_pt = phi + n*neighbor_index;
       vector_PRECISION eta_pt = eta + n*index;
-      coarse_n_hopp_PRECISION_vectorized( eta_pt, phi_pt, Dminus + 4*vectorized_link_offset*neighbor_index, l );
+      coarse_pn_hopp_PRECISION_vectorized( eta_pt, phi_pt, Dminus + 4*vectorized_link_offset*neighbor_index, -1, l );
     }
   }  
 #else
@@ -1339,7 +1339,7 @@ void n_coarse_block_PRECISION_boundary_op( vector_PRECISION eta, vector_PRECISIO
       vector_PRECISION phi_pt = phi + n*neighbor_index;
       vector_PRECISION eta_pt = eta + n*index;
       config_PRECISION D_pt = D + site_size*index + link_size*mu;
-      coarse_n_hopp_PRECISION( eta_pt, phi_pt, D_pt, l );
+      coarse_pn_hopp_PRECISION( eta_pt, phi_pt, D_pt, -1, l );
     }
     // minus mu direction
     for ( int i=bbl[2*mu+1]; i<bbl[2*mu+2]; i+=2 ) {
@@ -1348,7 +1348,7 @@ void n_coarse_block_PRECISION_boundary_op( vector_PRECISION eta, vector_PRECISIO
       vector_PRECISION phi_pt = phi + n*neighbor_index;
       vector_PRECISION eta_pt = eta + n*index;
       config_PRECISION D_pt = D + site_size*neighbor_index + link_size*mu;
-      coarse_n_daggered_hopp_PRECISION( eta_pt, phi_pt, D_pt, l );
+      coarse_pn_daggered_hopp_PRECISION( eta_pt, phi_pt, D_pt, -1, l );
     }
   }
 #endif
@@ -1433,10 +1433,8 @@ void additive_schwarz_PRECISION( vector_PRECISION phi, vector_PRECISION D_phi, v
   
   if ( res == _NO_RES ) {
     vector_PRECISION_copy( r, eta, nb_thread_start*s->block_vector_size, nb_thread_end*s->block_vector_size, l );
-    vector_PRECISION_define( x, 0, nb_thread_start*s->block_vector_size, nb_thread_end*s->block_vector_size, l );
-    START_MASTER(threading)
-    vector_PRECISION_define( x, 0, l->inner_vector_size, l->schwarz_vector_size, l );
-    END_MASTER(threading)
+    vector_PRECISION_define_zero( x, 0, nb*s->block_vector_size, l, threading );
+    vector_PRECISION_define_zero( x, l->inner_vector_size, l->schwarz_vector_size, l, threading );
   } else {
     vector_PRECISION_copy( x, phi, nb_thread_start*s->block_vector_size, nb_thread_end*s->block_vector_size, l );
     vector_PRECISION_copy( latest_iter, phi, nb_thread_start*s->block_vector_size, nb_thread_end*s->block_vector_size, l );
@@ -1511,7 +1509,7 @@ void additive_schwarz_PRECISION( vector_PRECISION phi, vector_PRECISION D_phi, v
 
   for ( i=nb_thread_start; i<nb_thread_end; i++ ) {
     if ( l->relax_fac != 1.0 )
-      vector_PRECISION_scale( phi, x, l->relax_fac, s->block[i].start*l->num_lattice_site_var, s->block[i].start*l->num_lattice_site_var+s->block_vector_size, l );
+      vector_PRECISION_scale( phi, x, l->relax_fac, s->block[i].start*l->num_lattice_site_var, s->block[i].start*l->num_lattice_site_var+s->block_vector_size, l, no_threading );
     else
       vector_PRECISION_copy( phi, x, s->block[i].start*l->num_lattice_site_var, s->block[i].start*l->num_lattice_site_var+s->block_vector_size, l );
   }
@@ -1533,7 +1531,7 @@ void additive_schwarz_PRECISION( vector_PRECISION phi, vector_PRECISION D_phi, v
             s->block[i].start*l->num_lattice_site_var+s->block_vector_size, l );
         if ( l->relax_fac != 1.0 )
           vector_PRECISION_scale( D_phi, D_phi, l->relax_fac, s->block[i].start*l->num_lattice_site_var,
-              s->block[i].start*l->num_lattice_site_var+s->block_vector_size, l );
+                                  s->block[i].start*l->num_lattice_site_var+s->block_vector_size, l, no_threading );
       }
     }
     
@@ -1552,7 +1550,7 @@ void additive_schwarz_PRECISION( vector_PRECISION phi, vector_PRECISION D_phi, v
             s->block[i].start*l->num_lattice_site_var+s->block_vector_size, l );
         if ( l->relax_fac != 1.0 )
           vector_PRECISION_scale( D_phi, D_phi, l->relax_fac, s->block[i].start*l->num_lattice_site_var,
-              s->block[i].start*l->num_lattice_site_var+s->block_vector_size, l );
+                                  s->block[i].start*l->num_lattice_site_var+s->block_vector_size, l, no_threading );
       }
     }
   }
@@ -1621,10 +1619,8 @@ void red_black_schwarz_PRECISION( vector_PRECISION phi, vector_PRECISION D_phi, 
   
   if ( res == _NO_RES ) {
     vector_PRECISION_copy( r, eta, start, end, l );
-    vector_PRECISION_define( x, 0, start, end, l );
-    START_MASTER(threading)
-    vector_PRECISION_define( x, 0, l->inner_vector_size, l->schwarz_vector_size, l );
-    END_MASTER(threading)
+    vector_PRECISION_define_zero( x, 0, l->inner_vector_size, l, threading );
+    vector_PRECISION_define_zero( x, l->inner_vector_size, l->schwarz_vector_size, l, threading );
     SYNC_CORES(threading)
   } else {
     vector_PRECISION_copy( x, phi, start, end, l );
@@ -1682,7 +1678,7 @@ void red_black_schwarz_PRECISION( vector_PRECISION phi, vector_PRECISION D_phi, 
   
   // copy phi = x
   if ( l->relax_fac != 1.0 )
-    vector_PRECISION_scale( phi, x, l->relax_fac, start, end, l );
+    vector_PRECISION_scale( phi, x, l->relax_fac, start, end, l, no_threading );
   else
     vector_PRECISION_copy( phi, x, start, end, l );
   
@@ -1695,7 +1691,7 @@ void red_black_schwarz_PRECISION( vector_PRECISION phi, vector_PRECISION D_phi, 
                                 s->block[index].start*l->num_lattice_site_var+s->block_vector_size, l );
         if ( l->relax_fac != 1.0 ) {
           vector_PRECISION_scale( D_phi, D_phi, l->relax_fac, s->block[index].start*l->num_lattice_site_var,
-                                  s->block[index].start*l->num_lattice_site_var+s->block_vector_size, l );
+                                  s->block[index].start*l->num_lattice_site_var+s->block_vector_size, l, no_threading );
         }
       }
     }
@@ -1712,7 +1708,7 @@ void red_black_schwarz_PRECISION( vector_PRECISION phi, vector_PRECISION D_phi, 
                                 s->block[index].start*l->num_lattice_site_var+s->block_vector_size, l );
         if ( l->relax_fac != 1.0 ) {
           vector_PRECISION_scale( D_phi, D_phi, l->relax_fac, s->block[index].start*l->num_lattice_site_var,
-                                  s->block[index].start*l->num_lattice_site_var+s->block_vector_size, l );
+                                  s->block[index].start*l->num_lattice_site_var+s->block_vector_size, l, no_threading );
         }
         START_MASTER(threading)
         PROF_PRECISION_STOP( _SM3, 1 );
@@ -1787,17 +1783,12 @@ void schwarz_PRECISION( vector_PRECISION phi, vector_PRECISION D_phi, vector_PRE
   
   if ( res == _NO_RES ) {
     vector_PRECISION_copy( r, eta, nb_thread_start*s->block_vector_size, nb_thread_end*s->block_vector_size, l );
-    vector_PRECISION_define( x, 0, nb_thread_start*s->block_vector_size, nb_thread_end*s->block_vector_size, l );
+    vector_PRECISION_define_zero( x, 0, nb*s->block_vector_size, l, threading );
+    vector_PRECISION_define_zero( x, l->inner_vector_size, l->schwarz_vector_size, l, threading );
   } else {
     vector_PRECISION_copy( x, phi, nb_thread_start*s->block_vector_size, nb_thread_end*s->block_vector_size, l );
   }
     
-  START_MASTER(threading)
-  if ( res == _NO_RES ) {
-    vector_PRECISION_define( x, 0, l->inner_vector_size, l->schwarz_vector_size, l );
-  }
-  END_MASTER(threading)
-  
   SYNC_CORES(threading)
   
   for ( k=0; k<cycles; k++ ) {
@@ -1890,7 +1881,7 @@ void schwarz_PRECISION( vector_PRECISION phi, vector_PRECISION D_phi, vector_PRE
   
   for ( i=nb_thread_start; i<nb_thread_end; i++ ) {
     if ( l->relax_fac != 1.0 )
-      vector_PRECISION_scale( phi, x, l->relax_fac, s->block[i].start*l->num_lattice_site_var, s->block[i].start*l->num_lattice_site_var+s->block_vector_size, l );
+      vector_PRECISION_scale( phi, x, l->relax_fac, s->block[i].start*l->num_lattice_site_var, s->block[i].start*l->num_lattice_site_var+s->block_vector_size, l, no_threading );
     else
       vector_PRECISION_copy( phi, x, s->block[i].start*l->num_lattice_site_var, s->block[i].start*l->num_lattice_site_var+s->block_vector_size, l );
   }
@@ -1912,7 +1903,7 @@ void schwarz_PRECISION( vector_PRECISION phi, vector_PRECISION D_phi, vector_PRE
                                 s->block[i].start*l->num_lattice_site_var+s->block_vector_size, l );
         if ( l->relax_fac != 1.0 ) {
           vector_PRECISION_scale( D_phi, D_phi, l->relax_fac, s->block[i].start*l->num_lattice_site_var,
-                                  s->block[i].start*l->num_lattice_site_var+s->block_vector_size, l );
+                                  s->block[i].start*l->num_lattice_site_var+s->block_vector_size, l, no_threading );
         }
       }
       if ( 1 == s->block[i].color ) {
@@ -1920,7 +1911,7 @@ void schwarz_PRECISION( vector_PRECISION phi, vector_PRECISION D_phi, vector_PRE
                                 s->block[i].start*l->num_lattice_site_var+s->block_vector_size, l );
         if ( l->relax_fac != 1.0 ) {
           vector_PRECISION_scale( D_phi, D_phi, l->relax_fac, s->block[i].start*l->num_lattice_site_var,
-                                  s->block[i].start*l->num_lattice_site_var+s->block_vector_size, l );
+                                  s->block[i].start*l->num_lattice_site_var+s->block_vector_size, l, no_threading );
         }
       }
     }
@@ -1939,7 +1930,7 @@ void schwarz_PRECISION( vector_PRECISION phi, vector_PRECISION D_phi, vector_PRE
                                 s->block[i].start*l->num_lattice_site_var+s->block_vector_size, l );
         if ( l->relax_fac != 1.0 ) {
           vector_PRECISION_scale( D_phi, D_phi, l->relax_fac, s->block[i].start*l->num_lattice_site_var,
-                                  s->block[i].start*l->num_lattice_site_var+s->block_vector_size, l );
+                                  s->block[i].start*l->num_lattice_site_var+s->block_vector_size, l, no_threading );
         }
       }
     }    
@@ -2006,16 +1997,12 @@ void sixteen_color_schwarz_PRECISION( vector_PRECISION phi, vector_PRECISION D_p
     
     if ( res == _NO_RES ) {
       vector_PRECISION_copy( r, eta, nb_thread_start*s->block_vector_size, nb_thread_end*s->block_vector_size, l );
-      vector_PRECISION_define( x, 0, nb_thread_start*s->block_vector_size, nb_thread_end*s->block_vector_size, l );
+      vector_PRECISION_define_zero( x, 0, nb*s->block_vector_size, l, threading );
+      vector_PRECISION_define_zero( x, l->inner_vector_size, l->schwarz_vector_size, l, threading );
     } else {
       vector_PRECISION_copy( x, phi, nb_thread_start*s->block_vector_size, nb_thread_end*s->block_vector_size, l );
     }
     
-    START_MASTER(threading)
-    if ( res == _NO_RES ) {
-      vector_PRECISION_define( x, 0, l->inner_vector_size, l->schwarz_vector_size, l );
-    }
-    END_MASTER(threading)
     
     SYNC_CORES(threading)
     
@@ -2093,7 +2080,7 @@ void sixteen_color_schwarz_PRECISION( vector_PRECISION phi, vector_PRECISION D_p
     SYNC_CORES(threading)
     
     if ( l->relax_fac != 1.0 )
-      vector_PRECISION_scale( phi, x, l->relax_fac, nb_thread_start*s->block_vector_size, nb_thread_end*s->block_vector_size, l );
+      vector_PRECISION_scale( phi, x, l->relax_fac, nb_thread_start*s->block_vector_size, nb_thread_end*s->block_vector_size, l, no_threading );
     else
       vector_PRECISION_copy( phi, x, nb_thread_start*s->block_vector_size, nb_thread_end*s->block_vector_size, l );
     
@@ -2104,7 +2091,7 @@ void sixteen_color_schwarz_PRECISION( vector_PRECISION phi, vector_PRECISION D_p
     vector_PRECISION true_r = NULL;
 
     PUBLIC_MALLOC( true_r, complex_PRECISION, l->vector_size );
-    vector_PRECISION_define( true_r, 0, 0, l->inner_vector_size, l );
+    vector_PRECISION_define_zero( true_r, 0, l->inner_vector_size, l, no_threading );
 
 
     if ( D_phi == NULL ) {
@@ -2123,7 +2110,7 @@ void sixteen_color_schwarz_PRECISION( vector_PRECISION phi, vector_PRECISION D_p
         boundary_op( true_r, x, i, s, l );
       }
     }
-    vector_PRECISION_saxpy( true_r, eta, true_r, -1, 0, l->inner_vector_size, l );
+    vector_PRECISION_saxpy( true_r, eta, true_r, -1, 0, l->inner_vector_size, l, no_threading );
     PRECISION r_norm = global_norm_PRECISION( true_r, 0, l->inner_vector_size, l, no_threading ),
       den = global_norm_PRECISION( eta, 0, l->inner_vector_size, l, no_threading );
     r_norm/=den;
@@ -2229,7 +2216,7 @@ void schwarz_PRECISION_mvm_testfun( schwarz_PRECISION_struct *s, level_struct *l
   MALLOC( v2, complex_PRECISION, vs );
   MALLOC( v3, complex_PRECISION, vs );
 
-  vector_PRECISION_define_random( v1, 0, ivs, l );
+  vector_PRECISION_define_random( v1, 0, ivs, l, no_threading );
 
   op( v3, v1, &(s->op), l, no_threading );
 

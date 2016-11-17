@@ -27,16 +27,13 @@ void rhs_define( vector_double rhs, level_struct *l, struct Thread *threading ) 
   if(threading->thread != 0)
     return;
 
-  int start = threading->start_index[l->depth];
-  int end = threading->end_index[l->depth];
-
   if ( g.rhs == 0 ) {
-    vector_double_define( rhs, 1, start, end, l );
+    vector_double_define_real( rhs, 1, 0, l->inner_vector_size, l, threading );
     START_MASTER(threading)
     if ( g.print > 0 ) printf0("rhs = ones\n");
     END_MASTER(threading)
   } else if ( g.rhs == 1 )  {
-    vector_double_define( rhs, 0, start, end, l );
+    vector_double_define_zero( rhs, 0, l->inner_vector_size, l, threading );
     if ( g.my_rank == 0 ) {
       START_LOCKED_MASTER(threading)
       rhs[0] = 1.0;
@@ -47,14 +44,12 @@ void rhs_define( vector_double rhs, level_struct *l, struct Thread *threading ) 
     END_MASTER(threading)
   } else if ( g.rhs == 2 ) {
     // this would yield different results if we threaded it, so we don't
-    START_LOCKED_MASTER(threading)
-    vector_double_define_random( rhs, 0, l->inner_vector_size, l );
-    END_LOCKED_MASTER(threading)
+    vector_double_define_random( rhs, 0, l->inner_vector_size, l, threading );
     START_MASTER(threading)
     if ( g.print > 0 ) printf0("rhs = random\n");
     END_MASTER(threading)
   } else if ( g.rhs == 3 ) {
-    vector_double_define( rhs, 0, start, end, l );
+    vector_double_define_zero( rhs, 0, l->inner_vector_size, l, threading );
   } else {
     ASSERT( g.rhs >= 0 && g.rhs <= 4 );
   }
@@ -110,8 +105,8 @@ void solve( vector_double solution, vector_double source, level_struct *l, struc
   if ( g.vt.evaluation ) {
     vector_double rhs = g.mixed_precision==2?g.p_MP.dp.b:g.p.b;
     // this would yield different results if we threaded it, so we don't
+    vector_double_define_random( rhs, 0, l->inner_vector_size, l, threading );
     START_LOCKED_MASTER(threading)
-    vector_double_define_random( rhs, 0, l->inner_vector_size, l );
     scan_var( &(g.vt), l );
     END_LOCKED_MASTER(threading)
   } else {

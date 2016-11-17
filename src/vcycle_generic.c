@@ -127,9 +127,10 @@ void vcycle_PRECISION( vector_PRECISION phi, vector_PRECISION Dphi, vector_PRECI
           g.coarse_time += MPI_Wtime();
         END_MASTER(threading)
       }
-      if( i == 0 && res == _NO_RES )
-        interpolate3_PRECISION( phi, l->next_level->p_PRECISION.x, l, threading );
-      else
+      if( i == 0 && res == _NO_RES ) {        
+        vector_PRECISION_define_zero( phi, 0, l->inner_vector_size, l, threading );
+        interpolate_PRECISION( phi, l->next_level->p_PRECISION.x, l, threading );
+      } else
         interpolate_PRECISION( phi, l->next_level->p_PRECISION.x, l, threading );
       smoother_PRECISION( phi, Dphi, eta, l->post_smooth_iter, _RES, l, threading );
       res = _RES;

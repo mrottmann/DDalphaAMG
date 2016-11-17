@@ -602,14 +602,14 @@ static inline void correct_guess( vector_double guess, vector_double solution, v
     if( odd_dshift == 0 || even_dshift == 0 || even_dshift == odd_dshift ) {
       double dshift = ( odd_dshift == 0 ) ? even_dshift:odd_dshift;
       printf0("correcting with dshift %le\n", dshift);
-      vector_double_scale( guess, solution2, -I*dshift, g.p.v_start, g.p.v_end, &l );
+      vector_double_scale( guess, solution2, -I*dshift, 0, l.inner_vector_size, &l, threading[omp_get_thread_num()]);
       vector_double_plus( guess, guess, solution, start, end, &l );
     } else
       vector_double_copy( guess, solution, start, end, &l );
   }  
 }
 
-static inline change_epsbar_shift_sign( ) {
+static inline void change_epsbar_shift_sign( ) {
   
 #ifdef HAVE_TM1p1  
   if ( g.epsbar_ig5_even_shift !=0 || g.epsbar_ig5_odd_shift !=0 ) {
@@ -1613,9 +1613,12 @@ void DDalphaAMG_define_vector_const( double *vector, double re, double im ) {
 
   THREADED(threading[0]->n_core)
   if(vector!=NULL){
-    int start, end;
-    compute_core_start_end( 0, l.inner_vector_size, &start, &end, &l, threading[omp_get_thread_num()]);
-    vector_double_define( (vector_double) vector, re+I*im, start, end, &l );
+    if ( re && im )
+      vector_double_define( (vector_double) vector, re+I*im, 0, l.inner_vector_size, &l, threading[omp_get_thread_num()] );
+    else if ( re )
+      vector_double_define_real( (vector_double) vector, re, 0, l.inner_vector_size, &l, threading[omp_get_thread_num()] );
+    else
+      vector_double_define_zero( (vector_double) vector, 0, l.inner_vector_size, &l, threading[omp_get_thread_num()] );
   }
   else {
     warning0("Vector NULL when calling DDalphaAMG_define_vector_const!");
@@ -1626,12 +1629,10 @@ void DDalphaAMG_define_vector_rand( double *vector ) {
 
   THREADED(threading[0]->n_core)
   if(vector!=NULL){
-    int start, end;
-    compute_core_start_end( 0, l.inner_vector_size, &start, &end, &l, threading[omp_get_thread_num()]);
-    vector_double_define_random( (vector_double) vector, start, end, &l );
+    vector_double_define_random( (vector_double) vector, 0, l.inner_vector_size, &l, threading[omp_get_thread_num()] );
   }
   else {
-    warning0("Vector NULL when calling DDalphaAMG_define_vector_const!");
+    warning0("Vector NULL when calling DDalphaAMG_define_vector_rand!");
   }
 
 }
@@ -1639,28 +1640,23 @@ void DDalphaAMG_define_vector_rand( double *vector ) {
 double DDalphaAMG_vector_norm( double *vector ) {
 
   double norm = 0;
-  THREADED(threading[0]->n_core)
-  if(vector!=NULL){
-    norm = global_norm_double( (vector_double) vector, 0, l.inner_vector_size, &l, threading[omp_get_thread_num()] );
-   }
-  else {
-    warning0("Vector NULL when calling DDalphaAMG_define_vector_const!");
-  }
+  if(vector!=NULL)
+    THREADED(threading[0]->n_core)
+      norm = global_norm_double( (vector_double) vector, 0, l.inner_vector_size, &l, threading[omp_get_thread_num()] );
+  else
+    warning0("Vector NULL when calling DDalphaAMG_define_vector_norm!");
 
   return norm;
 }
 
 void DDalphaAMG_vector_saxpy( double *vector_out, double a, double *x, double *y ) {
 
-  THREADED(threading[0]->n_core)
-  if(vector_out!=NULL && x!=NULL && y!=NULL){
-    int start, end;
-    compute_core_start_end( 0, l.inner_vector_size, &start, &end, &l, threading[omp_get_thread_num()]);
-    vector_double_saxpy( (vector_double) vector_out, (vector_double) x, (vector_double) y, a, start, end, &l );
-  }
-  else {
-    warning0("Vector NULL when calling DDalphaAMG_define_vector_const!");
-  }
+  if(vector_out!=NULL && x!=NULL && y!=NULL)
+    THREADED(threading[0]->n_core)
+      vector_double_saxpy( (vector_double) vector_out, (vector_double) x, (vector_double) y, a, 0, 
+                           l.inner_vector_size, &l, threading[omp_get_thread_num()] );
+  else
+    warning0("Vector NULL when calling DDalphaAMG_define_vector_saxpy!");
 
 }
 

@@ -40,18 +40,6 @@
                                             level_struct *l, struct Thread *threading );
   void g5D_coarse_apply_schur_complement_PRECISION( vector_PRECISION out, vector_PRECISION in,
                                            operator_PRECISION_struct *op, level_struct *l, struct Thread *threading );
-  
-  void coarse_hopping_term_PRECISION( vector_PRECISION out, vector_PRECISION in, operator_PRECISION_struct *op,
-                                      const int amount, level_struct *l, struct Thread *threading );
-  void coarse_n_hopping_term_PRECISION( vector_PRECISION out, vector_PRECISION in, operator_PRECISION_struct *op,
-                                        const int amount, level_struct *l, struct Thread *threading );
-  void coarse_hopping_term_PRECISION_vectorized( vector_PRECISION out, vector_PRECISION in, operator_PRECISION_struct *op,
-                                      const int amount, level_struct *l, struct Thread *threading );
-  void coarse_pn_hopping_term_PRECISION_vectorized( vector_PRECISION out, vector_PRECISION in, operator_PRECISION_struct *op,
-                                      const int amount, level_struct *l, int sign, struct Thread *threading );
-  void coarse_n_hopping_term_PRECISION_vectorized( vector_PRECISION out, vector_PRECISION in, operator_PRECISION_struct *op,
-                                        const int amount, level_struct *l, struct Thread *threading );
-  
   void coarse_odd_even_PRECISION_test( vector_PRECISION c4, vector_PRECISION c1,
                                        level_struct *l, struct Thread *threading );
   

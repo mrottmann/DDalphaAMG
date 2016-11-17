@@ -403,7 +403,7 @@ void operator_PRECISION_test_routine( operator_PRECISION_struct *op, level_struc
 
   START_LOCKED_MASTER(threading)
   
-  vector_double_define_random( vd1, 0, l->inner_vector_size, l );
+  vector_double_define_random( vd1, 0, l->inner_vector_size, l, no_threading );
   apply_operator_double( vd2, vd1, &(g.p), l, no_threading );
   
   trans_PRECISION( vp1, vd1, op->translation_table, l, no_threading );

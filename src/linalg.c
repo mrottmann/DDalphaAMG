@@ -21,7 +21,6 @@
 
 #include "main.h"
 
-#ifndef OPTIMIZED_LINALG_float
 void process_multi_inner_product_MP( int count, complex_double *results, vector_float *phi,
                                      vector_float psi, int start, int end, level_struct *l,
                                      struct Thread *threading ) {
@@ -36,12 +35,39 @@ void process_multi_inner_product_MP( int count, complex_double *results, vector_
 
   SYNC_CORES(threading)
  
+#ifndef OPTIMIZED_LINALG_float
+
   compute_core_start_end_custom(start, end, &thread_start, &thread_end, l, threading, 12);
   for(int c=0; c<count; c++) {
     for ( i=thread_start; i<thread_end; ) {
       FOR12( results[c] += (complex_double) conj_float(phi[c][i])*psi[i]; i++; )
     }
   }
+
+#else
+  compute_core_start_end_custom(start, end, &thread_start, &thread_end, l, threading, (12/SIMD_LENGTH_float)*SIMD_LENGTH_float);
+  for( int c=0; c<count; c++) {
+    for ( i=thread_start; i<thread_end; ) {
+      mm_float psi_re; mm_float psi_im;
+      mm_float phi_re; mm_float phi_im;
+      mm_float result_re; mm_float result_im;
+
+      cload_float( (float*)(psi+i), &psi_re, &psi_im );
+      cload_float( (float*)(phi[c]+i), &phi_re, &phi_im );
+      cmul_conj_float(phi_re, phi_im, psi_re, psi_im, &result_re, &result_im);
+      i += SIMD_LENGTH_float;
+
+      for ( int j=1; j<12/SIMD_LENGTH_float; j++ ) {
+        cload_float( (float*)(psi+i ), &psi_re, &psi_im );
+        cload_float( (float*)(phi[c]+i), &phi_re, &phi_im );
+        cfmadd_conj_float(phi_re, phi_im, psi_re, psi_im, &result_re, &result_im);
+        i += SIMD_LENGTH_float;
+      }
+
+      results[c] += mm_reduce_add_float(result_re) + I* mm_reduce_add_float(result_im);
+    }
+  }
+#endif
 
   START_NO_HYPERTHREADS(threading)
   ((complex_double **)threading->workspace)[threading->core] = results;
@@ -60,7 +86,7 @@ void process_multi_inner_product_MP( int count, complex_double *results, vector_
 
   PROF_float_STOP( _PIP, (double)(end-start)/(double)l->inner_vector_size, threading );
 }
-#endif
+
 
 double global_norm_MP( vector_float x, int start, int end, level_struct *l, struct Thread *threading ) {
   

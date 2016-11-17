@@ -182,6 +182,7 @@
   #endif
 
   #include "vectorization_control.h"
+  #include "simd_intrinsic.h"
   #include "threading.h"
 
   // enumerations
@@ -204,6 +205,7 @@
       _SM1, _SM2, _SM3, _SM4, _SMALL1, _SMALL2, _NUM_PROF }; // _NUM_PROF has always to be the last constant!
   enum { _VTS = 20 };
   enum { _TRCKD_VAL, _STP_TIME, _SLV_ITER, _SLV_TIME, _CRS_ITER, _CRS_TIME, _SLV_ERR, _CGNR_ERR, _NUM_OPTB };
+  enum { _SSE, _AVX };
   
   typedef struct block_struct {
     int start, color, no_comm, *bt;
@@ -336,9 +338,7 @@
     
     // next coarser level
     struct level_struct *next_level;
-    
   } level_struct;
-
 
   typedef struct global_struct {
     
@@ -467,27 +467,21 @@
 // functions
 #include "clifford.h"
 
+#ifdef SIMD
+#include "simd_complex_float.h"
+#include "simd_complex_double.h"
+#include "simd_blas_float.h"
+#include "simd_blas_double.h"
+#endif
 #ifdef SSE
 #include "vectorization_dirac_float.h"
 #include "vectorization_dirac_double.h"
-#include "blas_vectorized.h"
-#include "sse_blas_vectorized.h"
 #include "sse_complex_float_intrinsic.h"
 #include "sse_complex_double_intrinsic.h"
 #include "sse_coarse_operator_float.h"
 #include "sse_coarse_operator_double.h"
-#include "sse_linalg_float.h"
-#include "sse_linalg_double.h"
-#include "sse_interpolation_float.h"
-#include "sse_interpolation_double.h"
-#else
-//no intrinsics
-#include "interpolation_float.h"
-#include "interpolation_double.h"
 #endif
 
-#include "data_float.h"
-#include "data_double.h"
 #include "data_layout.h"
 #include "io.h"
 #include "init.h"
@@ -503,6 +497,10 @@
 #include "linalg_double.h"
 #include "ghost_float.h"
 #include "ghost_double.h"
+#include "gram_schmidt_float.h"
+#include "gram_schmidt_double.h"
+#include "interpolation_float.h"
+#include "interpolation_double.h"
 #include "linsolve_float.h"
 #include "linsolve_double.h"
 #include "linsolve.h"
@@ -524,6 +522,8 @@
 #include "gathering_double.h"
 #include "coarse_operator_float.h"
 #include "coarse_operator_double.h"
+#include "coarse_coupling_float.h"
+#include "coarse_coupling_double.h"
 #include "coarse_oddeven_float.h"
 #include "coarse_oddeven_double.h"
 #include "var_table.h"
