@@ -29,8 +29,7 @@
                                      
   void arnoldi_step_MP( vector_float *V, vector_float *Z, vector_float w,
                         complex_double **H, complex_double* buffer, int j, void (*prec)(),
-                        complex_float shift, gmres_float_struct *p, level_struct *l,
-                        struct Thread *threading );
+                        gmres_float_struct *p, level_struct *l, struct Thread *threading );
                       
   void compute_solution_MP( vector_float x, vector_float *V, complex_double *y,
                             complex_double *gamma, complex_double **H, int j,

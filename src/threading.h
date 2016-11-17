@@ -43,11 +43,11 @@
 // nested omp: split into cores, each core splits into hyperthreads (like DD preconditioner)
 #define CORE_BARRIER(threading) \
     do { \
-        threading->barrier(threading->core); \
+      threading->barrier(threading->core);      \
     } while(0)
 #define HYPERTHREAD_BARRIER(threading) \
     do { \
-    threading->thread_barrier(threading->thread_barrier_data, threading->thread); \
+      threading->thread_barrier(threading->thread_barrier_data, threading->thread); \
     } while(0)
 
 #endif
@@ -77,8 +77,10 @@
     if(threading->thread == 0) \
         CORE_BARRIER(threading);
 
+#define MASTER(threading) \
+    if(threading->core + threading->thread == 0)
 #define START_MASTER(threading) \
-    if(threading->core + threading->thread == 0) {
+  MASTER(threading) {
 #define END_MASTER(threading) \
     }
 
@@ -101,7 +103,10 @@
 
 #ifdef OPENMP
 #include <omp.h>
+#define DO_PRAGMA(EXP) _Pragma (#EXP)
+#define THREADED(EXP) DO_PRAGMA ( omp parallel num_threads( EXP ) )
 #else
+#define THREADED(EXP)
 static inline int omp_get_thread_num( void ) {
   return 0;
 }
@@ -112,7 +117,7 @@ static inline int omp_get_num_threads( void ) {
 
 struct level_struct;
 
-struct common_thread_data
+typedef struct common_thread_data
 {
     // barrier among cores
     void (*barrier)(int);
@@ -121,7 +126,7 @@ struct common_thread_data
     // *common* workspace for *all* threads
     // sometimes threads need to exchange data, they can use this
     char *workspace;
-};
+} common_thread_data;
 
 void init_common_thread_data(struct common_thread_data *common);
 

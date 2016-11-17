@@ -26,7 +26,7 @@ void negative_sendrecv_PRECISION( vector_PRECISION phi, const int mu, comm_PRECI
   if( l->global_splitting[mu] > 1 ) {    
     
     int i, j, num_boundary_sites = c->num_boundary_sites[2*mu+1], boundary_start,
-        *boundary_table = c->boundary_table[2*mu+1], n = l->num_lattice_site_var;
+      *boundary_table = c->boundary_table[2*mu+1], n = l->num_lattice_site_var;
     
     vector_PRECISION buffer, tmp_pt, buffer_pt;
     
@@ -102,6 +102,10 @@ void ghost_alloc_PRECISION( int buffer_size, comm_PRECISION_struct *c, level_str
     if ( g.method < 5 )
       factor = 2;
   }
+
+#ifdef HAVE_TM1p1
+  factor *= 2;
+#endif
   
   if ( buffer_size <= 0 ) {
     c->comm_start[0] = c->offset*l->num_inner_lattice_sites;
@@ -128,13 +132,22 @@ void ghost_alloc_PRECISION( int buffer_size, comm_PRECISION_struct *c, level_str
   } else {
     for ( mu=0; mu<4; mu++ ) {
       c->max_length[mu] = buffer_size;
+#ifdef HAVE_TM1p1
+      MALLOC( c->buffer[2*mu], complex_PRECISION, 2*buffer_size );
+      MALLOC( c->buffer[2*mu+1], complex_PRECISION, 2*buffer_size );
+#else
       MALLOC( c->buffer[2*mu], complex_PRECISION, buffer_size );
       MALLOC( c->buffer[2*mu+1], complex_PRECISION, buffer_size );
+#endif
     }
   }
   
   if ( l->vbuf_PRECISION[8] == NULL ) {
+#ifdef HAVE_TM1p1
+    MALLOC( l->vbuf_PRECISION[8], complex_PRECISION, 2*l->vector_size );
+#else
     MALLOC( l->vbuf_PRECISION[8], complex_PRECISION, l->vector_size );
+#endif
   }
 }
 
@@ -149,7 +162,11 @@ void ghost_free_PRECISION( comm_PRECISION_struct *c, level_struct *l ) {
   }
   
   if ( l->vbuf_PRECISION[8] != NULL ) {
+#ifdef HAVE_TM1p1
+    FREE( l->vbuf_PRECISION[8], complex_PRECISION, 2*l->vector_size );
+#else
     FREE( l->vbuf_PRECISION[8], complex_PRECISION, l->vector_size );
+#endif
   }
 }
 
@@ -194,6 +211,15 @@ void ghost_sendrecv_PRECISION( vector_PRECISION phi, const int mu, const int dir
       table_start = c->num_even_boundary_sites[mu_dir];
     }
     
+#ifdef HAVE_TM1p1
+    if ( g.n_flavours == 2 ) {
+      length[0] *= 2;
+      length[1] *= 2;
+      comm_start *= 2;
+      offset *= 2;
+    }
+#endif
+
     ASSERT( c->in_use[mu_dir] == 0 );
     c->in_use[mu_dir] = 1;
     
@@ -270,6 +296,11 @@ void ghost_wait_PRECISION( vector_PRECISION phi, const int mu, const int dir,
     int mu_dir = 2*mu-MIN(dir,0);
     int i, j, *table, offset = c->offset, length[2]={0,0}, table_start = 0;
     vector_PRECISION buffer, phi_pt;
+
+#ifdef HAVE_TM1p1
+    if ( g.n_flavours == 2 )
+      offset *= 2;
+#endif
       
     if ( amount == _FULL_SYSTEM ) {
       length[0] = (c->num_boundary_sites[2*mu])*offset;
@@ -284,7 +315,7 @@ void ghost_wait_PRECISION( vector_PRECISION phi, const int mu, const int dir,
       length[1] = c->num_odd_boundary_sites[2*mu+1]*offset;
       table_start = c->num_even_boundary_sites[mu_dir];
     }
-    
+
     ASSERT( c->in_use[mu_dir] == 1 );
     
     if ( dir == 1 ) {

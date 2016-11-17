@@ -31,7 +31,9 @@ void no_hyperthread_barrier(void *barrier, int id)
 }
 void core_barrier(int core)
 {
+#ifdef OPENMP
 #pragma omp barrier
+#endif
 }
 void hyperthread_barrier(void *barrier, int hyperthead)
 {

@@ -41,11 +41,11 @@ int main( int argc, char **argv ) {
   h5info.mode=-1;
 #endif
   level_struct l;
-  config_double hopp = NULL, clov = NULL;
+  config_double hopp = NULL;
   
   MPI_Init( &argc, &argv );
   
-  predefine_rank();
+  predefine_rank( MPI_COMM_WORLD );
   if ( g.my_rank == 0 ) {
     printf("\n\n+----------------------------------------------------------+\n");
     printf("| The DDalphaAMG solver library.                           |\n");
@@ -62,37 +62,20 @@ int main( int argc, char **argv ) {
   setup_no_threading(no_threading, &l);
   
   MALLOC( hopp, complex_double, 3*l.inner_vector_size );
-  if ( g.two_cnfgs ) {
-    MALLOC( clov, complex_double, 3*l.inner_vector_size );
-    printf0("clover term configuration: %s", g.in_clov ); 
-
-    if(g.in_format == _LIME)
-      lime_read_conf( (double*)(clov), g.in_clov, &(g.plaq_clov) );
-    else
-      read_conf( (double*)(clov), g.in_clov, &(g.plaq_clov), &l );
-
-    printf0("hopping term ");
-  }
 
   if(g.in_format == _LIME)
     lime_read_conf( (double*)(hopp), g.in, &(g.plaq_hopp) );
   else 
     read_conf( (double*)(hopp), g.in, &(g.plaq_hopp), &l );
 
-  if ( !g.two_cnfgs ) {
-    g.plaq_clov = g.plaq_clov;
-  }
   // store configuration, compute clover term
-  dirac_setup( hopp, clov, &l );
+  dirac_setup( hopp, &l );
   FREE( hopp, complex_double, 3*l.inner_vector_size );
-  if ( g.two_cnfgs ) {
-    FREE( clov, complex_double, 3*l.inner_vector_size );
-  }
 
   commonthreaddata = (struct common_thread_data *)malloc(sizeof(struct common_thread_data));
   init_common_thread_data(commonthreaddata);
   
-#pragma omp parallel num_threads(g.num_openmp_processes)
+  THREADED(g.num_openmp_processes)
   {
     struct Thread threading;
     setup_threading(&threading, commonthreaddata, &l);

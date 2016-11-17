@@ -48,7 +48,7 @@
       int pcoords[4]; int rank;
       pcoords[T] = t/ll[T]; pcoords[Z] = z/ll[Z];
       pcoords[Y] = y/ll[Y]; pcoords[X] = x/ll[X];
-      MPI_Cart_rank( g.comm_cart, pcoords, &rank );
+      g.Cart_rank( g.comm_cart, pcoords, &rank );
       return rank;
     } else {
       return 0;

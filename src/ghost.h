@@ -23,8 +23,9 @@
   #define GHOST_HEADER
 
   void neighbor_define( level_struct *l );
-  void predefine_rank( void );
-  void cart_define( level_struct *l );
+  void predefine_rank( MPI_Comm comm );
+  void cart_validate( MPI_Comm comm, level_struct *l );
+  void cart_define( MPI_Comm comm, level_struct *l );
   void cart_free( level_struct *l );
-  
+
 #endif 

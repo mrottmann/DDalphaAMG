@@ -22,9 +22,7 @@
 #ifndef INIT_HEADER
   #define INIT_HEADER
 
-#include "dd_alpha_amg_parameters.h"
-
-struct Thread;
+  struct init;
 
   void method_init( int *argc, char ***argv, level_struct *l );
   void method_setup( vector_double *V, level_struct *l, struct Thread *threading );
@@ -39,8 +37,8 @@ struct Thread;
   void l_init( level_struct *l );
   void g_init( level_struct *l );
   void lg_in( char *inputfile, level_struct *l );
-  void set_dd_alpha_amg_parameters( struct dd_alpha_amg_parameters *amg_params, level_struct *l );
-  void update_dd_alpha_amg_parameters( const struct dd_alpha_amg_parameters *amg_params, level_struct *l );
+  void set_DDalphaAMG_parameters( struct init *params, level_struct *l );
+  
   void parameter_update( level_struct *l );
   int read_parameter( void **save_at, char *search_pattern, char *read_format, int number, FILE *read_from, int set_default );
 #endif

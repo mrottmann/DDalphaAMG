@@ -23,6 +23,7 @@
   #define DATA_LAYOUT_HEADER
   
   void data_layout_init( level_struct *l );
+void data_layout_n_flavours( int n, level_struct *l, struct Thread *threading );
   void define_eot( int *eot, int *N, level_struct *l );
   void define_eo_bt( int **bt, int *eot, int *n_ebs, int *n_obs, int *n_bs, int *N, level_struct *l );
   void define_nt_bt_tt( int *nt, int *backward_nt, int **bt, int *tt, int *it, int *dt, level_struct *l );

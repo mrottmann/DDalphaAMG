@@ -115,7 +115,7 @@ do
   if [ ${iparam[$i]} = "-o" -o ${iparam[$i]} = "-output" ]
   then
     ipa[0]=1
-  elif [ ${iparam[$i]} = "-db" -o ${iparam[$i]} = "-debug" ]
+  elif [ ${iparam[$i]} = "-db" -o ${iparam[$i]} = "-debug" -o ${iparam[$i]} = "-devel" ]
   then
     ipa[1]=1
     mydebug="debug_"
@@ -168,9 +168,9 @@ echo ""
 
 if [ ${ipa[1]} = 0  ]
 then
-  exec=dd_alpha_amg
+  exec=bin/DDalphaAMG
 else
-  exec=dd_alpha_amg_db
+  exec=bin/DDalphaAMG_devel
   echo "You chose the debug version"
   echo ""
 fi
@@ -187,7 +187,7 @@ fi
 if [ ${ipa[0]} = 0  ]
 then
 #   /opt/mpich/ch-p4/bin/mpirun $shareoption -np $np $exec $inputfile
-  mpirun -default-hostfile /etc/openmpi-default-hostfile $shareoption -np $np $exec $inputfile
+  mpirun $shareoption -np $np $exec $inputfile
 else
   cp $inputfile output/${opf}.txt
   echo "" >> output/${opf}.txt
@@ -197,5 +197,5 @@ else
   echo "+----------------------------------------------------------------------------------+" >> ../output/${opf}.txt
   echo "" >> output/${opf}.txt
   echo "" >> output/${opf}.txt
-  mpirun -default-hostfile /etc/openmpi-default-hostfile $shareoption -np $np $exec $inputfile >> ../output/${opf}.txt & disown
+  mpirun $shareoption -np $np $exec $inputfile >> ../output/${opf}.txt & disown
 fi

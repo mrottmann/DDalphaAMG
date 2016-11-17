@@ -373,7 +373,7 @@ unsigned int initFile( char *filename, const int mode, level_struct *l ) {
     lls[1] = l->local_lattice[1];
     lls[2] = l->local_lattice[2];
     lls[3] = l->local_lattice[0];
-    writeSmallDataset_double(configgroup_id, "m0", l->real_shift);
+    writeSmallDataset_double(configgroup_id, "m0", g.m0);
     writeSmallDataset_double(configgroup_id, "csw", g.csw);
     writeSmallDataset_double(configgroup_id, "plaquette_clov", g.plaq_clov);
     writeSmallDataset_double(configgroup_id, "plaquette_hopp", g.plaq_hopp);
@@ -457,7 +457,7 @@ void read_conf( double *input_data, char *input_name, double *conf_plaq, level_s
 * - double *conf_plaq: Holds the plaquette of given configuration.                                                
 *********************************************************************************/
 
-  int t, z, y, x, i, j, k, mu, lsize[4], desired_rank,
+  int t, z, y, x, k, mu, lsize[4], desired_rank,
       *gl=l->global_lattice, *ll=l->local_lattice, read_size = 4*18*ll[X];
   double *input_data_pt, plaq;
   FILE* fin = NULL;
@@ -522,13 +522,6 @@ void read_conf( double *input_data, char *input_name, double *conf_plaq, level_s
               byteswap8( (char *) ( input_data_pt + i ) );
             }
 #endif
-            if ( t == gl[T]-1 ) {
-              if ( g.anti_pbc ) {
-                for ( j=0; j<read_size; j+=4*18 )
-                  for ( i=0; i<18; i++ )
-                    (input_data_pt+j+T*18)[i] = -(input_data_pt+j+T*18)[i];
-              }
-            }
             input_data_pt += read_size;
           }
           
@@ -550,12 +543,12 @@ void read_conf( double *input_data, char *input_name, double *conf_plaq, level_s
 }
 
 
-void write_header( FILE **file, double *lambda, char* vector_type, int n, level_struct *l ) {
+void write_header_mg( FILE **file, double *lambda, char* vector_type, int n, level_struct *l ) {
   
   fprintf( *file, "<header>\n" );
   fprintf( *file, "%s\n", vector_type );
   fprintf( *file, "clifford basis: %s\n", CLIFFORD_BASIS );
-  fprintf( *file, "m0: %.14lf\n", l->real_shift );
+  fprintf( *file, "m0: %.14lf\n", g.m0 );
   fprintf( *file, "csw: %.14lf\n", g.csw );
   fprintf( *file, "clov plaq: %.14lf\n", g.plaq_clov );
   fprintf( *file, "hopp plaq: %.14lf\n", g.plaq_hopp );
@@ -663,7 +656,7 @@ void vector_io( double *phi, char *filename, const int mode, level_struct *l ) {
   } else if ( mode == _WRITE ) {
     if ( g.my_rank == 0 ) {
       ASSERT( (file = fopen( filename, "wb" )) != NULL );
-      write_header( &file, NULL, filename, 1, l );
+      write_header_mg( &file, NULL, filename, 1, l );
     }
     printf0("writing file \"%s\" ...\n", filename );
     
@@ -785,8 +778,8 @@ void vector_io( double *phi, char *filename, const int mode, level_struct *l ) {
   } else if ( mode == _WRITE ) {
     printf0("writing hdf5 file \"%s\"... ", filename);
 
-    // write_header( file_id, NULL, filename, 1, l );
-    printf0("write_header for g.method != 6 not implemented in HDF5!");
+    // write_header_mg( file_id, NULL, filename, 1, l );
+    printf0("write_header_mg for g.method != 6 not implemented in HDF5!");
     
     if(dset_ex == 0)
     {
@@ -925,7 +918,7 @@ void vector_io_single_file( double *psi, double *lambda, char *filename, const i
     
     if ( g.my_rank == 0 ) {
       ASSERT( (file = fopen( filename, "wb" )) != NULL );
-      write_header( &file, lambda, vector_type, n, l );
+      write_header_mg( &file, lambda, vector_type, n, l );
     }
 
     printf0("writing file \"%s\" ...\n", filename );

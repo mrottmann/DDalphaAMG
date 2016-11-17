@@ -40,8 +40,8 @@ void d_plus_clover_aggregate_PRECISION_vectorized( complex_PRECISION *eta1, comp
   config_PRECISION D = s->op.D;
 
   // add clover term/shift
-  spin0and1_site_clover_PRECISION_vectorized( eta1, phi+site_offset*site, s->op.clover+42*site, s->op.shift, offset );
-  spin2and3_site_clover_PRECISION_vectorized( eta2, phi+site_offset*site, s->op.clover+42*site, s->op.shift, offset );
+  spin0and1_site_clover_PRECISION_vectorized( eta1, phi+site_offset*site, s->op.clover+42*site, 4+s->op.m0, offset );
+  spin2and3_site_clover_PRECISION_vectorized( eta2, phi+site_offset*site, s->op.clover+42*site, 4+s->op.m0, offset );
 
   index_out = site;
 
@@ -100,5 +100,17 @@ void d_neighbor_aggregate_PRECISION_vectorized( complex_PRECISION *eta1, complex
   mvm_PRECISION_vectorized_simd_length( buffer+6*offset, D_pt, phi_pt+6*offset );
   mvm_PRECISION_vectorized_simd_length( buffer+9*offset, D_pt, phi_pt+9*offset );
   twospin2_p_PRECISION_vectorized_simd_length( eta1, eta2, buffer, mu );
+}
+#endif
+
+#ifdef SSE
+void diagonal_aggregate_PRECISION_vectorized( complex_PRECISION *eta1, complex_PRECISION *eta2,
+    complex_PRECISION *phi, schwarz_PRECISION_struct *s, level_struct *l,
+    int site ) {
+
+  int offset = SIMD_LENGTH_PRECISION;
+  int site_offset = 12*offset;
+
+  sse_diagonal_aggregate_PRECISION( eta1, eta2, phi+site_offset*site, s->op.odd_proj+12*site, offset );
 }
 #endif

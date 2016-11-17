@@ -33,7 +33,7 @@ typedef struct lime_fileinfo {
  *  LIME functions
  *                                                                                   
  * In DDalphaAMG format:     
- ** t slowest running index	         
+ ** t slowest running index           
  ** x fastest running index            
  ** all positive directions                
  ** ordering: +T,+Z,+Y,+X         
@@ -186,14 +186,8 @@ void lime_write_info(FILE **fout, char* binary_data, n_uint64_t data_size_per_si
   ASSERT(limeWriteRecordHeader(limeheader, limewriter)>=0);
   ASSERT(limeWriteRecordData(tmp_string, &message_length, limewriter)>=0);
   limeDestroyHeader(limeheader);
-  
-  #ifndef HAVE_TM
-  sprintf(tmp_string, "<header>\n\tclifford basis: %s\n\tm0: %.14lf\n\tcsw: %.14lf\n\tclov plaq: %.14lf\n\thopp plaq: %.14lf\n\tcomputed plaq: %.14lf\n\tclov conf name: %s\n\thopp conf name: %s\n\tX: %d\n\tY: %d\n\tZ: %d\n\tT: %d\n\tX local: %d\n\tY local: %d\n\tZ local: %d\n\tT local: %d\n\tsetup iter: %d\n\tpost smoothing iter: %d\n\tblock iter: %d\n</header>", CLIFFORD_BASIS, g.solve_m0, g.csw, g.plaq_clov, g.plaq_hopp, g.plaq, g.in_clov, g.in, g.global_lattice[0][X], g.global_lattice[0][Y], g.global_lattice[0][Z], g.global_lattice[0][T], g.local_lattice[0][X], g.local_lattice[0][Y], g.local_lattice[0][Z], g.local_lattice[0][T], g.setup_iter[0], g.post_smooth_iter[0], g.block_iter[0] );
-  #else
-  sprintf(tmp_string, "<header>\n\tclifford basis: %s\n\tm0: %.14lf\n\tcsw: %.14lf\n\tmu: %.14lf\n\tclov plaq: %.14lf\n\thopp plaq: %.14lf\n\tcomputed plaq: %.14lf\n\tclov conf name: %s\n\thopp conf name: %s\n\tX: %d\n\tY: %d\n\tZ: %d\n\tT: %d\n\tX local: %d\n\tY local: %d\n\tZ local: %d\n\tT local: %d\n\tsetup iter: %d\n\tpost smoothing iter: %d\n\tblock iter: %d\n</header>", CLIFFORD_BASIS, g.solve_m0, g.csw, g.tm_mu, g.plaq_clov, g.plaq_hopp, g.plaq, g.in_clov, g.in, g.global_lattice[0][X], g.global_lattice[0][Y], g.global_lattice[0][Z], g.global_lattice[0][T], g.local_lattice[0][X], g.local_lattice[0][Y], g.local_lattice[0][Z], g.local_lattice[0][T], g.setup_iter[0], g.post_smooth_iter[0], g.block_iter[0] );
-  #endif
   message_length=(n_uint64_t) strlen(tmp_string);
-  limeheader = limeCreateHeader(1, 1, "dd_alpha_amg-header", message_length);
+  limeheader = limeCreateHeader(1, 1, "DDalphaAMG-header", message_length);
   
   ASSERT(limeheader != (LimeRecordHeader*)NULL);
   ASSERT(limeWriteRecordHeader(limeheader, limewriter)>=0);
@@ -508,7 +502,7 @@ void lime_write_vector( double *phi, char *filename ) {
         }
   }
   
-  if ( g.my_rank == 0 ) {	
+  if ( g.my_rank == 0 ) {  
     for ( i=0; i<bar_size; i++ ) {
       byteswap8( (char *) ( buffer_pt->data + i ) );
     }

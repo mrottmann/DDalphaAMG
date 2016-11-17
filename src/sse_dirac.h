@@ -32,6 +32,15 @@ void pbn_float( complex_float *eta, complex_float *prp[4], int start, int end );
 void su3_pbp_double( complex_double* eta, complex_double *prn[4], operator_double_struct *op, int *neighbor, int start, int end );
 void su3_pbp_float( complex_float* eta, complex_float *prn[4], operator_float_struct *op, int *neighbor, int start, int end );
 
+void dprp_double( complex_double *prn[4], complex_double *phi, int start, int end );
+void dprp_float( complex_float *prn[4], complex_float *phi, int start, int end );
+void dprn_su3_double( complex_double *prp[4], complex_double *phi, operator_double_struct *op, int *neighbor, int start, int end );
+void dprn_su3_float( complex_float *prp[4], complex_float *phi, operator_float_struct *op, int *neighbor, int start, int end );
+void dpbn_double( complex_double *eta, complex_double *prp[4], int start, int end );
+void dpbn_float( complex_float *eta, complex_float *prp[4], int start, int end );
+void su3_dpbp_double( complex_double* eta, complex_double *prn[4], operator_double_struct *op, int *neighbor, int start, int end );
+void su3_dpbp_float( complex_float* eta, complex_float *prn[4], operator_float_struct *op, int *neighbor, int start, int end );
+
 void block_oddeven_plus_coupling_double( double *eta, double *D, double *phi, int mu,
                                          int start, int end, int *ind, int *neighbor );
 void block_oddeven_plus_coupling_float( float *eta, float *D, float *phi, int mu,
@@ -66,12 +75,24 @@ void boundary_nplus_coupling_float( float *eta, float *D, float *phi, int mu,
                                             int start, int end, int *ind, int *neighbor );
 
 void sse_set_clover_double( double *out, complex_double *in );
-void sse_set_clover_float( float *out, complex_double *in );
+void sse_set_clover_float( float *out, complex_float *in );
+void sse_set_clover_doublet_double( double *out, complex_double *in );
+void sse_set_clover_doublet_float( float *out, complex_float *in );
+void sse_add_diagonal_clover_double( double *out, complex_double *diag );
+void sse_add_diagonal_clover_float( float *out, complex_float *diag );
+void sse_add_diagonal_clover_doublet_double( double *out, complex_double *diag );
+void sse_add_diagonal_clover_doublet_float( float *out, complex_float *diag );
+void sse_clover_double( vector_double eta, vector_double phi, operator_double_struct *op, int start, int end, level_struct *l, struct Thread *threading );
+void sse_clover_float( vector_float eta, vector_float phi, operator_float_struct *op, int start, int end, level_struct *l, struct Thread *threading );
 void sse_site_clover_double( double *eta, const double *phi, const double *clover );
 void sse_site_clover_float( float *eta, const float *phi, float *clover );
+void sse_site_clover_doublet_double( double *eta, const double *phi, const double *clover );
+void sse_site_clover_doublet_float( float *eta, const float *phi, float *clover );
 
 void sse_site_clover_invert_double( double *clover_in, double *clover_out );
 void sse_site_clover_invert_float( float *clover_in, float *clover_out );
+void sse_site_clover_doublet_invert_double( double *clover_in, config_double eps_term, double *clover_out );
+void sse_site_clover_doublet_invert_float( float *clover_in, config_float eps_term, float *clover_out );
 
 
 static inline void sse_mvm_double_simd_length( const complex_double *eta, const complex_double *D, const complex_double *phi ) {}
@@ -441,6 +462,45 @@ static inline void sse_spin0and1_site_clover_float( const complex_float *eta, co
 #endif
 }
 
+static inline void sse_diagonal_aggregate_double( const complex_double *eta1, const complex_double *eta2, const complex_double *phi, const config_double diag, int elements ) {}
+
+static inline void sse_diagonal_aggregate_float( const complex_float *eta1, const complex_float *eta2, const complex_float *phi, const config_float diag, int elements ) {
+#ifdef SSE
+  // offset computations 2*index+0/1 are for real and imaginary parts
+
+  // diagonal
+  for(int i=0; i<elements; i+=SIMD_LENGTH_float) {
+    __m128 zero = _mm_setzero_ps();
+    for(int j=0; j<6; j++) {
+      __m128 factor = _mm_set1_ps(creal(diag[j]));
+      __m128 in_re  = _mm_load_ps((float *)phi + i + (2*j+0)*elements);
+      __m128 in_im  = _mm_load_ps((float *)phi + i + (2*j+1)*elements);
+      
+      in_re = _mm_mul_ps( factor, in_re );
+      in_im = _mm_mul_ps( factor, in_im );
+      
+      _mm_store_ps((float *)eta1 + i + (2*j+0)*elements, in_re);
+      _mm_store_ps((float *)eta1 + i + (2*j+1)*elements, in_im);
+      _mm_store_ps((float *)eta2 + i + (2*j+0)*elements, zero);
+      _mm_store_ps((float *)eta2 + i + (2*j+1)*elements, zero);
+    }
+    for(int j=6; j<12; j++) {
+      __m128 factor = _mm_set1_ps(creal(diag[j]));
+      __m128 in_re  = _mm_load_ps((float *)phi + i + (2*j+0)*elements);
+      __m128 in_im  = _mm_load_ps((float *)phi + i + (2*j+1)*elements);
+      
+      in_re = _mm_mul_ps( factor, in_re );
+      in_im = _mm_mul_ps( factor, in_im );
+      
+      _mm_store_ps((float *)eta2 + i + (2*j+0)*elements, in_re);
+      _mm_store_ps((float *)eta2 + i + (2*j+1)*elements, in_im);
+      _mm_store_ps((float *)eta1 + i + (2*j+0)*elements, zero);
+      _mm_store_ps((float *)eta1 + i + (2*j+1)*elements, zero);
+    }
+  }
+#endif
+}
+
 
 static inline void sse_spin2and3_site_clover_double( const complex_double *eta, const complex_double *phi, const config_double clover, double shift, int elements ) {}
 
@@ -540,6 +600,7 @@ static inline void sse_spin2and3_site_clover_float( const complex_float *eta, co
   }
 #endif
 }
+
 
 #endif
 #endif // DIRAC_SSE_H

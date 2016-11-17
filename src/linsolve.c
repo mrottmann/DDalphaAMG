@@ -47,7 +47,6 @@ void fgmres_MP_struct_alloc( int m, int n, int vl, double tol, const int prec_ki
                                  
   p->dp.print = g.vt.evaluation?0:1;             p->sp.print = g.vt.evaluation?0:1;
   p->dp.initial_guess_zero = 1;                  p->sp.initial_guess_zero = 1;
-  p->dp.shift = 0;                               p->sp.shift = 0;
   p->dp.v_start = 0;                             p->sp.v_start = 0;
   p->dp.v_end = l->inner_vector_size;            p->sp.v_end = l->inner_vector_size;
   
@@ -60,6 +59,10 @@ void fgmres_MP_struct_alloc( int m, int n, int vl, double tol, const int prec_ki
     g.p.eval_operator = d_plus_clover_double;
   }
   
+#ifdef HAVE_TM1p1
+  vl*=2;
+#endif
+
   // double precision part
   total = 0;
   total += (m+1)*m; // Hessenberg matrix
@@ -220,12 +223,11 @@ int fgmres_MP( gmres_MP_struct *p, level_struct *l, struct Thread *threading ) {
     // inner loop in single precision
     for( il=0; il<p->dp.restart_length && finish==0; il++) {
       j = il; iter++;
-      arnoldi_step_MP( p->sp.V, p->sp.Z, p->sp.w, p->dp.H, p->dp.y, j, p->sp.preconditioner,
-                       p->sp.shift, &(p->sp), l, threading );
+      arnoldi_step_MP( p->sp.V, p->sp.Z, p->sp.w, p->dp.H, p->dp.y, j, p->sp.preconditioner, &(p->sp), l, threading );
       
       if ( cabs( p->dp.H[j][j+1] ) > 1E-15 ) {
         qr_update_double( p->dp.H, p->dp.s, p->dp.c, p->dp.gamma, j, l, threading );
-        gamma_jp1 = cabs( p->dp.gamma[j+1] );	  
+        gamma_jp1 = cabs( p->dp.gamma[j+1] );          
         
         if ( iter%10 == 0 || p->sp.preconditioner != NULL || l->depth > 0 ) {
 #if defined(TRACK_RES) && !defined(WILSON_BENCHMARK)
@@ -316,8 +318,7 @@ int fgmres_MP( gmres_MP_struct *p, level_struct *l, struct Thread *threading ) {
 
 void arnoldi_step_MP( vector_float *V, vector_float *Z, vector_float w,
                       complex_double **H, complex_double* buffer, int j, void (*prec)(),
-                      complex_float shift, gmres_float_struct *p, level_struct *l,
-                      struct Thread *threading ) {
+                      gmres_float_struct *p, level_struct *l, struct Thread *threading ) {
   
   SYNC_MASTER_TO_ALL(threading)
   SYNC_CORES(threading)
@@ -332,7 +333,6 @@ void arnoldi_step_MP( vector_float *V, vector_float *Z, vector_float w,
   if ( prec != NULL ) {
     if ( p->kind == _LEFT ) {
       apply_operator_float( Z[0], V[j], p, l, threading );
-      if ( shift ) vector_float_saxpy( Z[0], Z[0], V[j], shift, start, end, l );
       prec( w, NULL, Z[0], _NO_RES, l, threading );
     } else {
       if ( g.mixed_precision == 2 && (g.method >= 1 && g.method <= 2 ) ) {
@@ -342,11 +342,9 @@ void arnoldi_step_MP( vector_float *V, vector_float *Z, vector_float w,
         prec( Z[j], NULL, V[j], _NO_RES, l, threading );
         apply_operator_float( w, Z[j], p, l, threading ); // w = D*Z[j]
       }
-      if ( shift ) vector_float_saxpy( w, w, Z[j], shift, start, end, l );
     }
   } else {
     apply_operator_float( w, V[j], p, l, threading ); // w = D*V[j]
-    if ( shift ) vector_float_saxpy( w, w, V[j], shift, start, end, l );
   }
 
   complex_double tmp[j+1];
@@ -370,7 +368,7 @@ void arnoldi_step_MP( vector_float *V, vector_float *Z, vector_float w,
   complex_float alpha[j+1];
   for( i=0; i<=j; i++ )
     alpha[i] = (complex_float) -H[j][i];
-  vector_float_multi_saxpy( w, V, alpha, 1, j+1, start, end, l );
+  vector_float_multi_saxpy( w, V, alpha, 1, j+1, p->v_start, p->v_end, l, threading );
   
   complex_double tmp2 = global_norm_MP( w, p->v_start, p->v_end, l, threading );
   START_MASTER(threading)
@@ -390,11 +388,6 @@ void compute_solution_MP( vector_float x, vector_float *V, complex_double *y,
   
   int i, k;
   // start and end indices for vector functions depending on thread
-  int start;
-  int end;
-  // compute start and end indices for core
-  // this puts zero for all other hyperthreads, so we can call functions below with all hyperthreads
-  compute_core_start_end(p->v_start, p->v_end, &start, &end, l, threading);
 
   START_MASTER(threading)
   
@@ -415,12 +408,12 @@ void compute_solution_MP( vector_float x, vector_float *V, complex_double *y,
   SYNC_MASTER_TO_ALL(threading)
   
   // x = V*y
-  vector_float_scale( x, V[0], (complex_float) y[0], start, end, l );
+    vector_float_scale( x, V[0], (complex_float) y[0], p->v_start, p->v_end, l, threading );
 
   complex_float alpha[j];
   for ( i=1; i<=j; i++ )
     alpha[i-1] = (complex_float) y[i];
-  vector_float_multi_saxpy( x, &(V[1]), alpha, 1, j, start, end, l );
+  vector_float_multi_saxpy( x, &(V[1]), alpha, 1, j, p->v_start, p->v_end, l, threading );
 }
 
 

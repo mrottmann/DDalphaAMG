@@ -36,8 +36,8 @@
   void local_minres_PRECISION( vector_PRECISION phi, vector_PRECISION eta, vector_PRECISION latest_iter,
                                int start, schwarz_PRECISION_struct *s, level_struct *l, struct Thread *threading );
   int arnoldi_step_PRECISION( vector_PRECISION *V, vector_PRECISION *Z, vector_PRECISION w,
-                               complex_PRECISION **H, complex_PRECISION* buffer, int j, void (*prec)(),
-                               complex_PRECISION shift, gmres_PRECISION_struct *p, level_struct *l, struct Thread *threading );
+                              complex_PRECISION **H, complex_PRECISION* buffer, int j, void (*prec)(),
+                              gmres_PRECISION_struct *p, level_struct *l, struct Thread *threading );
   void qr_update_PRECISION( complex_PRECISION **H, complex_PRECISION *s,
                             complex_PRECISION *c, complex_PRECISION *gamma, int j,
                             level_struct *l, struct Thread *threading );

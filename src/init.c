@@ -20,6 +20,7 @@
  */
 
 #include "main.h"
+#include "DDalphaAMG.h"
 
 complex_double _COMPLEX_double_ONE = (complex_double)1.0;
 complex_double _COMPLEX_double_MINUS_ONE = (complex_double)(-1.0);
@@ -43,14 +44,13 @@ void next_level_setup( vector_double *V, level_struct *l, struct Thread *threadi
     // define next level parameters
     l->next_level->level = l->level-1;
     l->next_level->depth = l->depth+1;
-    l->next_level->real_shift = l->real_shift;
-    l->next_level->dirac_shift = l->dirac_shift;
     l->next_level->tol = l->tol;
     l->next_level->post_smooth_iter = g.post_smooth_iter[l->depth+1];
     l->next_level->relax_fac = g.relax_fac[l->depth+1];
     l->next_level->block_iter = g.block_iter[l->depth+1];
     l->next_level->setup_iter = g.setup_iter[l->depth+1];
     l->next_level->num_eig_vect = l->level==1?l->num_eig_vect:g.num_eig_vect[l->depth+1];
+    l->next_level->num_parent_eig_vect = l->num_eig_vect;
     l->next_level->num_lattice_site_var = 2 * l->num_eig_vect;
     l->next_level->n_cy = g.ncycle[l->depth+1];
     l->next_level->global_lattice = g.global_lattice[l->depth+1];
@@ -112,7 +112,9 @@ void next_level_setup( vector_double *V, level_struct *l, struct Thread *threadi
     }
   }
   
+  START_LOCKED_MASTER(threading)
   if ( l->depth == 0 ) printf0("\ninitial coarse grid correction is defined\n");
+  END_LOCKED_MASTER(threading)
 }
 
 
@@ -136,8 +138,8 @@ void method_setup( vector_double *V, level_struct *l, struct Thread *threading )
   double t0=0, t1=0;
   
   START_LOCKED_MASTER(threading)
+  g.in_setup = 1;
   if ( g.vt.evaluation ) {
-    l->dirac_shift = l->real_shift;
     l->level = g.num_levels-1;
   }
   
@@ -147,34 +149,56 @@ void method_setup( vector_double *V, level_struct *l, struct Thread *threading )
     prof_init( l );
   
   if ( g.method > 0 ) {
+#ifdef INIT_ONE_PREC
     if ( g.mixed_precision == 2 ) {
+#endif
       fgmres_MP_struct_alloc( g.restart, g.max_restart, l->inner_vector_size,
                               g.tol, _RIGHT, vcycle_float, &(g.p_MP), l );
       g.p.op = &(g.op_double);
-#if defined (DEBUG) || defined (TEST_VECTOR_ANALYSIS)
+#if defined(INIT_ONE_PREC) && (defined (DEBUG) || defined (TEST_VECTOR_ANALYSIS))
+#ifdef HAVE_TM1p1
+      MALLOC( g.p.b, complex_double, 2*l->inner_vector_size );
+      MALLOC( g.p.x, complex_double, 2*l->inner_vector_size );
+#else
       MALLOC( g.p.b, complex_double, l->inner_vector_size );
       MALLOC( g.p.x, complex_double, l->inner_vector_size );
 #endif
+#endif
+#ifdef INIT_ONE_PREC
     } else {
+#endif
       fgmres_double_struct_alloc( g.restart, g.max_restart, l->inner_vector_size, g.tol,
                                   _GLOBAL_FGMRES, _RIGHT, preconditioner,
                                   g.method==6?g5D_plus_clover_double:d_plus_clover_double, &(g.p), l );
     }
+#ifdef INIT_ONE_PREC
   }
+#endif
   else if ( g.method == 0 ) {
+#ifdef INIT_ONE_PREC
     if ( g.mixed_precision == 2 ) {
+#endif
       fgmres_MP_struct_alloc( g.restart, g.max_restart, l->inner_vector_size,
                               g.tol, _NOTHING, NULL, &(g.p_MP), l );
       g.p.op = &(g.op_double);
-#if defined (DEBUG) || defined (TEST_VECTOR_ANALYSIS)
+#if defined(INIT_ONE_PREC) && (defined (DEBUG) || defined (TEST_VECTOR_ANALYSIS))
+#ifdef HAVE_TM1p1
+      MALLOC( g.p.b, complex_double, 2*l->inner_vector_size );
+      MALLOC( g.p.x, complex_double, 2*l->inner_vector_size );
+#else
       MALLOC( g.p.b, complex_double, l->inner_vector_size );
       MALLOC( g.p.x, complex_double, l->inner_vector_size );
 #endif
+#endif
+#ifdef INIT_ONE_PREC
     } else {
+#endif
       fgmres_double_struct_alloc( g.restart, g.max_restart, l->inner_vector_size, g.tol,
                                   _GLOBAL_FGMRES, _NOTHING, NULL, d_plus_clover_double,
                                   &(g.p), l );
+#ifdef INIT_ONE_PREC
     }
+#endif
   } else if ( g.method == -1 ) {
     fgmres_double_struct_alloc( 4, g.restart*g.max_restart, l->inner_vector_size, g.tol,
                                 _GLOBAL_FGMRES, _NOTHING, NULL, d_plus_clover_double, &(g.p), l );
@@ -228,8 +252,27 @@ void method_setup( vector_double *V, level_struct *l, struct Thread *threading )
     }
     if ( g.method >=0  )
       printf0("|          restart length: %-3d                             |\n", g.restart );
-    printf0("|                      m0: %+9.6lf                       |\n", creal(l->dirac_shift) );
+    printf0("|                      m0: %+9.6lf                       |\n", g.m0 );
+    if(g.setup_m0!=g.m0)
+      printf0("|                setup m0: %+9.6lf                       |\n", g.setup_m0 );
     printf0("|                     csw: %+9.6lf                       |\n", g.csw );
+#ifdef HAVE_TM
+    printf0("|                      mu: %+9.6lf                       |\n", g.mu);
+    if(g.setup_mu!=g.mu)
+      printf0("|                setup mu: %+9.6lf                       |\n", g.setup_mu );
+    if(g.mu_odd_shift!=0.)
+      printf0("|         mu on odd sites: %+9.6lf                       |\n", g.mu + g.mu_odd_shift );
+    if(g.mu_even_shift!=0.)
+      printf0("|        mu on even sites: %+9.6lf                       |\n", g.mu + g.mu_even_shift );
+#endif
+#ifdef HAVE_TM1p1
+    if(g.epsbar)
+      printf0("|                  epsbar: %+9.6lf                       |\n", g.epsbar);
+    if(g.epsbar_ig5_odd_shift!=0.)
+      printf0("|    ig5 epsbar odd sites: %+9.6lf                       |\n", g.epsbar_ig5_odd_shift );
+    if(g.epsbar_ig5_even_shift!=0.)
+      printf0("|   ig5 epsbar even sites: %+9.6lf                       |\n", g.epsbar_ig5_even_shift );
+#endif
     if ( g.method > 0 ) {
       printf0("+----------------------------------------------------------+\n");
       printf0("|%17s cycles: %-6d                          |\n", "preconditioner", l->n_cy );
@@ -254,6 +297,22 @@ void method_setup( vector_double *V, level_struct *l, struct Thread *threading )
           printf0("|                  cycles: %-6d                          |\n", g.coarse_restart );
           printf0("|               tolerance: %-5.0le                           |\n", g.coarse_tol );
         }
+#ifdef HAVE_TM
+        if( g.mu!=0. && g.mu_factor[i]!=1 )
+          printf0("|                      mu: %+9.6lf                       |\n", g.mu * g.mu_factor[i] );
+        if( g.mu_odd_shift!=0. && g.mu_factor[i]!=1 )
+          printf0("|         mu on odd sites: %+9.6lf                       |\n", (g.mu + g.mu_odd_shift) * g.mu_factor[i] );
+        if( g.mu_even_shift!=0. && g.mu_factor[i]!=1 )
+          printf0("|        mu on even sites: %+9.6lf                       |\n", (g.mu + g.mu_even_shift) * g.mu_factor[i] );
+#endif
+#ifdef HAVE_TM1p1
+        if( g.epsbar!=0. && g.epsbar_factor[i]!=1 )
+          printf0("|                 epsbar: %+9.6lf                       |\n", g.epsbar * g.epsbar_factor[i] );
+        if(g.epsbar_ig5_odd_shift!=0. && g.epsbar_factor[i]!=1)
+          printf0("|  ig5 epsbar on odd sites: %+9.6lf                     |\n", (g.epsbar + g.epsbar_ig5_odd_shift) * g.epsbar_factor[i] );
+        if(g.epsbar_ig5_even_shift!=0. && g.epsbar_factor[i]!=1)
+          printf0("| ig5 epsbar on even sites: %+9.6lf                     |\n", (g.epsbar + g.epsbar_ig5_even_shift) *g.epsbar_factor[i] );
+#endif
       }
     }
     if ( g.method > 0 && g.kcycle > 0 ) {
@@ -266,19 +325,17 @@ void method_setup( vector_double *V, level_struct *l, struct Thread *threading )
     printf0("\n");
   }
 #endif
-  END_LOCKED_MASTER(threading)
+  g.in_setup = 0;
+  END_LOCKED_MASTER(threading)  
 
-  
+  START_LOCKED_MASTER(threading)
+  if ( l->depth==0 && g.method >=0 )
+    prof_print( l );
+  END_LOCKED_MASTER(threading)
   
 #ifdef DEBUG
   test_routine( l, threading );
 #endif
-  START_LOCKED_MASTER(threading)
-  g.mg_setup_status.gauge_updates_since_last_setup = 0;
-  g.mg_setup_status.gauge_updates_since_last_setup_update = 0;
-    if ( l->depth==0 )
-      prof_print( l );
-  END_LOCKED_MASTER(threading)
 }
 
 
@@ -301,15 +358,26 @@ void method_free( level_struct *l ) {
     fine_level_double_free( l );
   }
 
+#ifdef INIT_ONE_PREC
   if ( g.mixed_precision == 2 && g.method >= 0 ) {
+#endif
     fgmres_MP_struct_free( &(g.p_MP) );
-#if defined (DEBUG) || defined (TEST_VECTOR_ANALYSIS)
+#if defined (INIT_ONE_PREC) && (defined (DEBUG) || defined (TEST_VECTOR_ANALYSIS))
+#ifdef HAVE_TM1p1
+    FREE( g.p.b, complex_double, 2*l->inner_vector_size );
+    FREE( g.p.x, complex_double, 2*l->inner_vector_size );
+#else
     FREE( g.p.b, complex_double, l->inner_vector_size );
     FREE( g.p.x, complex_double, l->inner_vector_size );
 #endif
+#endif
+#ifdef INIT_ONE_PREC
   } else {
+#endif
     fgmres_double_struct_free( &(g.p), l );
+#ifdef INIT_ONE_PREC
   }
+#endif
 
 }
 
@@ -327,48 +395,64 @@ void method_update( int setup_iter, level_struct *l, struct Thread *threading ) 
   
   if ( g.method > 0 && g.interpolation && g.num_levels > 1 && setup_iter > 0 ) {
     
-    double t0=0, t1=0, shift = creal(l->dirac_shift);
+    double t0=0, t1=0;
     
     START_LOCKED_MASTER(threading)
     g.in_setup = 1;
-      if ( l->depth==0 )
-        prof_init( l );
+    if ( l->depth==0 )
+      prof_init( l );
     END_LOCKED_MASTER(threading)
 
-    START_MASTER(threading)
-    t0 = MPI_Wtime();
-    END_MASTER(threading)
+    MASTER(threading)
+      t0 = MPI_Wtime();
     
-    if ( g.setup_m0 != shift )
-      shift_update( (complex_double)g.setup_m0, l, threading );
+    if ( g.setup_m0 != g.m0 ) {
+      m0_update( (complex_double)g.setup_m0, l, threading );
+#ifdef HAVE_TM
+    }
+    if ( g.setup_mu != g.mu ) {
+      tm_term_update( (complex_double)g.setup_mu, l, threading );
+      finalize_operator_update( l, threading );
+    } else if (g.setup_m0 != g.m0) {
+#endif
+      finalize_operator_update( l, threading );
+    }
     
     if ( g.mixed_precision )
       iterative_float_setup( setup_iter, l, threading );
     else
       iterative_double_setup( setup_iter, l, threading );
-        
-    if ( g.setup_m0 != shift )
-      shift_update( (complex_double)shift, l, threading );
+
     
-    START_MASTER(threading)
-    t1 = MPI_Wtime();
-    g.total_time = t1-t0;
-    printf0("\nperformed %d iterative setup steps\n", setup_iter );
-    printf0("elapsed time: %lf seconds (%lf seconds on coarse grid)\n\n", t1-t0, g.coarse_time );
-    END_MASTER(threading)
+    if ( g.setup_m0 != g.m0 ) {
+      m0_update( (complex_double)g.m0, l, threading );
+#ifdef HAVE_TM
+    }
+    if ( g.setup_mu != g.mu ) {
+      tm_term_update( (complex_double)g.mu, l, threading );
+      finalize_operator_update( l, threading );
+    } else if (g.setup_m0 != g.m0) {
+#endif
+      finalize_operator_update( l, threading );
+    }
+
+    MASTER(threading) {
+      t1 = MPI_Wtime();
+      g.total_time = t1-t0;
+      printf0("\nperformed %d iterative setup steps\n", setup_iter );
+      printf0("elapsed time: %lf seconds (%lf seconds on coarse grid)\n\n", t1-t0, g.coarse_time );
+    }
     
+    START_LOCKED_MASTER(threading)
+    g.in_setup = 0;
+    if ( l->depth==0 )
+      prof_print( l );
+    END_LOCKED_MASTER(threading)
+      
 #ifdef DEBUG
     test_routine( l, threading );
 #endif
 
-    START_LOCKED_MASTER(threading)
-    g.in_setup = 0;
-    g.mg_setup_status.gauge_updates_since_last_setup_update = 0;
-      if ( l->depth==0 )
-        prof_print( l );
-    END_LOCKED_MASTER(threading)
-    
-    
   }
 }
 
@@ -383,7 +467,7 @@ void method_init( int *argc, char ***argv, level_struct *l ) {
 * - char ***argv: In case inputfile is provided, contains name of this file.
 * 
 * CAUTION: changes in this function have no influence on the interface         
-* library, cf. dd_alpha_amg_init.                                                    
+* library, cf. DDalphaAMG_init.                                                    
 *********************************************************************************/
 
   char inputfile[STRINGLENGTH];
@@ -400,11 +484,13 @@ void method_init( int *argc, char ***argv, level_struct *l ) {
   fflush(g.logfile);
 #endif
   
-  predefine_rank();
+  predefine_rank( MPI_COMM_WORLD );
   l_init( l );
   g_init( l );
   lg_in( inputfile, l );
-  cart_define( l );
+  g.Cart_rank = MPI_Cart_rank;
+  g.Cart_coords = MPI_Cart_coords;
+  cart_define( MPI_COMM_WORLD, l );
   data_layout_init( l );
   operator_double_alloc( &(g.op_double), _ORDINARY, l ); 
   operator_double_define( &(g.op_double), l );
@@ -428,6 +514,12 @@ void method_finalize( level_struct *l ) {
   FREE( g.post_smooth_iter, int, ls );
   FREE( g.ncycle, int, ls );
   FREE( g.relax_fac, double, ls );
+#ifdef HAVE_TM
+  FREE( g.mu_factor, double, ls );
+#endif
+#ifdef HAVE_TM1p1
+  FREE( g.epsbar_factor, double, ls );
+#endif
   FREE( g.block_iter, int, ls );
   FREE( g.setup_iter, int, ls );
   FREE( g.num_eig_vect, int, ls );
@@ -466,11 +558,19 @@ int read_parameter( void **save_at, char *search_pattern, char *read_format, int
   char read_pattern[100000], *read_pattern_pt, buffer[50];
   var_table_entry e;
   
+  if ( read_from == NULL ) {
+    if ( !set_default )
+      error0("FILE NULL, unable to find string \"%s\" --- fatal error\n", search_pattern);
+    else
+      return match;
+  }
+    
   fseek( read_from, 0L, SEEK_SET );
   
   while ( !match && fgets( read_pattern, 100000, read_from ) ) {
   
     k = strlen( read_pattern );
+    /*
     j = 0;
     for ( i=0; i<k && !match; i++ ) {
       if ( search_pattern[j] == read_pattern[i] )
@@ -479,6 +579,16 @@ int read_parameter( void **save_at, char *search_pattern, char *read_format, int
         j = 0;
       if ( j == n ) {
         match = 1;
+      }
+    }
+    */ // replace it with a search just at the beginning of the line.
+    if(k>n) {
+      match = 1;
+      i = 0;
+      while ( i<n && match ) { 
+        if ( search_pattern[i] != read_pattern[i] )
+          match = 0;
+        i++;
       }
     }
   }
@@ -527,6 +637,7 @@ int read_parameter( void **save_at, char *search_pattern, char *read_format, int
     if ( !set_default )
       error0("unable to find string \"%s\" --- fatal error\n", search_pattern);
   }
+
   return match;
 }
 
@@ -556,86 +667,133 @@ void g_init( level_struct *l ) {
   g.block_iter = NULL;
   g.setup_iter = NULL;
   g.relax_fac = NULL;
+#ifdef HAVE_TM
+  g.mu_factor = NULL;
+#endif
+#ifdef HAVE_TM1p1
+  g.epsbar_factor = NULL;
+  g.n_flavours = 1;
+#endif
   g.gamma = NULL;
   g.odd_even_table = NULL;
-  g.two_cnfgs = 0;
   g.cur_storage = 0;
   g.max_storage = 0;
   g.in_setup = 0;
 }
 
-
-void parameter_update( level_struct *l ) {
-  
-  l->level = g.num_levels-1-l->depth;
-  l->post_smooth_iter = g.post_smooth_iter[l->depth];
-  l->block_iter = g.block_iter[l->depth];
-  l->setup_iter = g.setup_iter[l->depth];
-  l->num_eig_vect = g.num_eig_vect[l->depth];
-  
-  if ( l->level > 0 ) 
-    parameter_update( l->next_level );
-}
-
-
-void set_default_global_info() {
-
-  g.in[0] = '\0';
-  g.rhs = 1;
-  g.propagator_coords[0] = 0;
-  g.propagator_coords[1] = 0;
-  g.propagator_coords[2] = 0;
-  g.propagator_coords[3] = 0;
-  g.anti_pbc = 1;
-}
-
 void read_global_info( FILE *in ) {
 
   void *save_pt;
-  int match;
-
+    
   // Note: There is actually no default set for the three following values
   // Though, when using the code as a library, no configuration paths are required.
-  save_pt = &(g.in);
-  match = read_parameter( &save_pt, "configuration:", "%s", 1, in, _DEFAULT_SET );
-  if ( !match ) {
-    save_pt = &(g.in);
-    match = read_parameter( &save_pt, "hopp cnfg:", "%s", 1, in, _DEFAULT_SET );
-    save_pt = &(g.in_clov);
-    match = match && read_parameter( &save_pt, "clov cnfg:", "%s", 1, in, _DEFAULT_SET ); 
-    g.two_cnfgs = 1;
-    if ( !match ) {
-      printf00("Caution: No configuration read from disk!\n");
-    }  
-  }
+  save_pt = &(g.in); g.in[0] = '\0';
+  read_parameter( &save_pt, "configuration:", "%s", 1, in, _NO_DEFAULT_SET );
+  
   save_pt = &(g.in_format); g.in_format = _STANDARD;
   read_parameter( &save_pt, "format:", "%d", 1, in, _DEFAULT_SET );
-  
-  save_pt = &(g.rhs);
+
+  // right hand side
+  save_pt = &(g.rhs);  g.rhs = 1;
   read_parameter( &save_pt, "right hand side:", "%d", 1, in, _DEFAULT_SET );
-  save_pt = g.propagator_coords;
-  read_parameter( &save_pt, "propagator coordinates:", "%d", 4, in, _DEFAULT_SET );
-  
   if ( g.rhs == 4 ) {
     save_pt = &(g.source_list);
     read_parameter( &save_pt, "source list:", "%s", 1, in, _NO_DEFAULT_SET );
+  }
+  else if ( g.rhs == 3 ) {
+    save_pt = g.propagator_coords;
+    read_parameter( &save_pt, "propagator coordinates:", "%d", 4, in, _DEFAULT_SET );
   }
   
   save_pt = &(g.num_levels); g.num_levels = 2;
   read_parameter( &save_pt, "number of levels:", "%d", 1, in, _DEFAULT_SET );
   g.num_desired_levels = g.num_levels;
-  save_pt = &(g.anti_pbc); g.anti_pbc = 0;
-  read_parameter( &save_pt, "antiperiodic boundary conditions:", "%d", 1, in, _DEFAULT_SET );
+    
+  save_pt = &(g.bc); g.bc = _PERIODIC;
+  read_parameter( &save_pt, "boundary conditions:", "%d", 1, in, _DEFAULT_SET );
+
+  if(g.bc==_TWISTED) {
+    save_pt = g.twisted_bc; for(int i=0; i<4; i++) g.twisted_bc[i]=0;
+    read_parameter( &save_pt, "twisted boundary conditions:", "%d", 4, in, _DEFAULT_SET );
+    for(int i=0; i<4; i++) g.twisted_bc[i]*=M_PI;
+  }
   
   save_pt = &(g.num_openmp_processes); g.num_openmp_processes = 1;
   read_parameter( &save_pt, "number of openmp threads:", "%d", 1, in, _DEFAULT_SET );
+  
 }
 
-void set_global_info( struct dd_alpha_amg_parameters *amg_params ) {
-  g.num_levels = amg_params->number_of_levels;
-  g.anti_pbc = 0;
+void read_no_default_info( FILE *in, level_struct *l ) {
+
+  void *save_pt;
+
+  // global lattice
+  save_pt = g.global_lattice[0];
+  read_parameter( &save_pt, "d0 global lattice:", "%d", 4, in, _NO_DEFAULT_SET );
+
+  // local lattice
+  save_pt = g.local_lattice[0];
+  read_parameter( &save_pt, "d0 local lattice:", "%d", 4, in, _NO_DEFAULT_SET );
+
+  // local lattice
+  save_pt = g.block_lattice[0];
+  read_parameter( &save_pt, "d0 block lattice:", "%d", 4, in, _NO_DEFAULT_SET );
+
+    // Wilson mass
+  save_pt = &(g.m0); g.m0 = 0;
+  read_parameter( &save_pt, "m0:", "%lf", 1, in, _DEFAULT_SET ); 
+  if ( g.m0 == 0 ) {
+    double kappa=0; save_pt = &(kappa);    
+    read_parameter( &save_pt, "kappa:", "%lf", 1, in, _DEFAULT_SET );
+    ASSERT(kappa != 0);
+    g.m0 = 1./(2.*kappa)-4.; //setting m0 from kappa
+  }
+  save_pt = &(g.csw);
+  read_parameter( &save_pt, "csw:", "%lf", 1, in, _NO_DEFAULT_SET );
+  
+#ifdef HAVE_TM
+  save_pt = &(g.mu);g.mu=0;
+  read_parameter( &save_pt, "mu:", "%lf", 1, in, _DEFAULT_SET );
+  if ( g.mu == 0 ) {
+    read_parameter( &save_pt, "2KappaMu:", "%lf", 1, in, _DEFAULT_SET );
+    g.mu = g.mu*(4.+g.m0);
+  }
+#endif
+
+#ifdef HAVE_TM1p1
+  save_pt = &(g.epsbar); g.epsbar = 0;
+  read_parameter( &save_pt, "epsbar:", "%lf", 1, in, _DEFAULT_SET );
+#endif
 }
 
+void set_global_info( struct init *params, level_struct *l ) {
+
+  // global lattice
+  for( int i=0; i<4; i++ ) {
+    g.global_lattice[0][i] = params->global_lattice[i];
+    g.local_lattice[0][i] = params->global_lattice[i]/params->procs[i];
+    g.block_lattice[0][i] = params->block_lattice[i];
+  }
+
+  g.bc = params->bc;
+
+  if(g.bc==_TWISTED) {
+    for(int i=0; i<4; i++){
+      g.twisted_bc[i]=params->theta[i];
+      g.twisted_bc[i]*=M_PI;
+    }
+  }
+  
+  // Operator
+  g.m0 = 1./(2.*params->kappa)-4.;
+  g.csw = params->csw;
+#ifdef HAVE_TM
+  g.mu = params->mu;
+#endif
+  
+  g.num_openmp_processes = params->number_openmp_threads;
+
+}
 
 int shortest_dir( int* data ) {
   int min=0, mu;
@@ -644,7 +802,6 @@ int shortest_dir( int* data ) {
       min = mu;
   return min;
 }
-
 
 int gcd( int a, int b ) {
   if ( b==0 )
@@ -655,7 +812,6 @@ int lcm( int a, int b ) {
   return ( a*b / gcd( a, b ) );
 }
 
-
 void read_geometry_data( FILE *in, int ls ) {
 
   void *save_pt;
@@ -664,10 +820,11 @@ void read_geometry_data( FILE *in, int ls ) {
   
   for ( i=0; i<ls; i++ ) {
     
-    // global lattice
-    sprintf( inputstr, "d%d global lattice:", i );
-    save_pt = g.global_lattice[i];
-    if ( i > 0 ) {
+    if(i>0) {
+      // global lattice
+      sprintf( inputstr, "d%d global lattice:", i );
+      save_pt = g.global_lattice[i];
+      
       if ( ! read_parameter( &save_pt, inputstr, "%d", 4, in, _DEFAULT_SET ) ) {
         nls = 1;
         for ( mu=0; mu<4; mu++ ) {
@@ -680,14 +837,11 @@ void read_geometry_data( FILE *in, int ls ) {
           break;
         }
       }
-    } else {
-      read_parameter( &save_pt, inputstr, "%d", 4, in, _NO_DEFAULT_SET );
-    }
-    
-    // local lattice
-    sprintf( inputstr, "d%d local lattice:", i );
-    save_pt = g.local_lattice[i];
-    if ( i > 0 ) {
+      
+      // local lattice
+      sprintf( inputstr, "d%d local lattice:", i );
+      save_pt = g.local_lattice[i];
+      
       if ( ! read_parameter( &save_pt, inputstr, "%d", 4, in, _DEFAULT_SET ) ) {
         nls = 1;
         nlls = 1;
@@ -706,17 +860,13 @@ void read_geometry_data( FILE *in, int ls ) {
           }
         }
       }
-    } else {
-      read_parameter( &save_pt, inputstr, "%d", 4, in, _NO_DEFAULT_SET );
-    }
-    
-    // block lattice
-    for ( mu=0; mu<4; mu++ )
-      g.block_lattice[i][mu] = 1;
-    if ( i<ls-1 ) {
-      sprintf( inputstr, "d%d block lattice:", i );
-      save_pt = g.block_lattice[i];
-      if ( i > 0 ) {
+      
+      // block lattice
+      for ( mu=0; mu<4; mu++ )
+        g.block_lattice[i][mu] = 1;
+      if ( i<ls-1 ) {
+        sprintf( inputstr, "d%d block lattice:", i );
+        save_pt = g.block_lattice[i];
         if ( ! read_parameter( &save_pt, inputstr, "%d", 4, in, _DEFAULT_SET ) ) {
           nls = 1;
           nb = 1;
@@ -734,7 +884,7 @@ void read_geometry_data( FILE *in, int ls ) {
               break;
             }
             nb *= g.local_lattice[i][mu]/g.block_lattice[i][mu];
-                        
+            
             if ( g.local_lattice[i][mu] < g.block_lattice[i][mu] ) {
               g.local_lattice[i][mu] *= g.block_lattice[i][mu];
               if ( ! DIVIDES( g.local_lattice[i][mu], g.global_lattice[i][mu] ) ) {
@@ -752,30 +902,27 @@ void read_geometry_data( FILE *in, int ls ) {
             mu = shortest_dir( g.local_lattice[i] );
             if ( g.global_lattice[i][mu] > g.local_lattice[i][mu] ) {
               g.local_lattice[i][mu] *= lcm( g.local_lattice[i][mu],
-                                            g.global_lattice[i][mu]/g.local_lattice[i][mu] );
+                                             g.global_lattice[i][mu]/g.local_lattice[i][mu] );
             }
           }
           
         }
-      } else {
-        read_parameter( &save_pt, inputstr, "%d", 4, in, _NO_DEFAULT_SET );
       }
     }
-    
 #ifdef DEBUG
     printf00("level: %d, gl: %3d %3d %3d %3d\n", i, g.global_lattice[i][0],
-            g.global_lattice[i][1],g.global_lattice[i][2],g.global_lattice[i][3] );
+             g.global_lattice[i][1],g.global_lattice[i][2],g.global_lattice[i][3] );
     
     printf00("level: %d, ll: %3d %3d %3d %3d\n", i, g.local_lattice[i][0],
-            g.local_lattice[i][1],g.local_lattice[i][2],g.local_lattice[i][3] );
-            
+             g.local_lattice[i][1],g.local_lattice[i][2],g.local_lattice[i][3] );
+    
     printf00("level: %d, bl: %3d %3d %3d %3d\n\n", i, g.block_lattice[i][0],
-            g.block_lattice[i][1],g.block_lattice[i][2],g.block_lattice[i][3] );
+             g.block_lattice[i][1],g.block_lattice[i][2],g.block_lattice[i][3] );
 #endif
-            
-            
+    
+    
     sprintf( inputstr, "d%d post smooth iter:", i );
-    save_pt = &(g.post_smooth_iter[i]); g.post_smooth_iter[i] = 2;
+    save_pt = &(g.post_smooth_iter[i]); g.post_smooth_iter[i] = 4;
     read_parameter( &save_pt, inputstr, "%d", 1, in, _DEFAULT_SET );
     
     sprintf( inputstr, "d%d preconditioner cycles:", i );
@@ -794,35 +941,29 @@ void read_geometry_data( FILE *in, int ls ) {
     
     sprintf( inputstr, "d%d setup iter:", i );
     save_pt = &(g.setup_iter[i]);
-    if ( i==0 ) g.setup_iter[i] = 6;
+    if ( i==0 ) g.setup_iter[i] = 5;
     else if ( i==1 ) g.setup_iter[i] = 3;
     else if ( i>1 ) g.setup_iter[i] = 2;
     read_parameter( &save_pt, inputstr, "%d", 1, in, _DEFAULT_SET );
     
-    sprintf( inputstr, "d%d test vectors:", i );
-    
-    save_pt = &(g.num_eig_vect[i]);
-    if ( i==0 ) g.num_eig_vect[i] = 20;
-    else
-#ifdef SSE
-      g.num_eig_vect[i] = MAX(4,((int)(1.5*g.num_eig_vect[0])-(((int)(1.5*g.num_eig_vect[0]))%SIMD_LENGTH_float)) );
-#else
-      g.num_eig_vect[i] = 1.5*g.num_eig_vect[0];
+#ifdef HAVE_TM
+    sprintf( inputstr, "d%d mu factor:", i );
+    save_pt = &(g.mu_factor[i]); g.mu_factor[i] = 1;
+    read_parameter( &save_pt, inputstr, "%lf", 1, in, _DEFAULT_SET );
 #endif
+
+#ifdef HAVE_TM1p1
+    sprintf( inputstr, "d%d epsbar factor:", i );
+    save_pt = &(g.epsbar_factor[i]); g.epsbar_factor[i] = 1;
+    read_parameter( &save_pt, inputstr, "%lf", 1, in, _DEFAULT_SET );
+#endif
+    
+    sprintf( inputstr, "d%d test vectors:", i );
+    save_pt = &(g.num_eig_vect[i]);
+    if ( i==0 ) g.num_eig_vect[i] = 24;
+    else g.num_eig_vect[i] = 28;
     read_parameter( &save_pt, inputstr, "%d", 1, in, _DEFAULT_SET );
         
-  }
-}
-
-void set_geometry_data( struct dd_alpha_amg_parameters *amg_params ) {
-  int ls = MAX(g.num_levels, 2);
-  for ( int i=0; i<ls; i++ ) {
-    for ( int mu=0; mu<4; mu++ ) {
-      g.global_lattice[i][mu] = amg_params->global_lattice[i][3-mu];
-      g.local_lattice[i][mu]  = amg_params->local_lattice[i][3-mu];
-      g.block_lattice[i][mu]  = amg_params->block_lattice[i][3-mu];
-    }
-    g.num_eig_vect[i]     = amg_params->mg_basis_vectors[i];
   }
 }
 
@@ -839,67 +980,53 @@ void read_solver_parameters( FILE *in, level_struct *l ) {
   
   save_pt = &(g.randomize); g.randomize = 0;
   read_parameter( &save_pt, "randomize test vectors:", "%d", 1, in, _DEFAULT_SET );
-  save_pt = &(g.coarse_iter); g.coarse_iter = 25;
+  save_pt = &(g.coarse_iter); g.coarse_iter = 200;
   read_parameter( &save_pt, "coarse grid iterations:", "%d", 1, in, _DEFAULT_SET );
-  save_pt = &(g.coarse_restart); g.coarse_restart = 40;
+  save_pt = &(g.coarse_restart); g.coarse_restart = 10;
   read_parameter( &save_pt, "coarse grid restarts:", "%d", 1, in, _DEFAULT_SET );
-  save_pt = &(g.coarse_tol); g.coarse_tol = 5E-2;
+  save_pt = &(g.coarse_tol); g.coarse_tol = 1E-1;
   read_parameter( &save_pt, "coarse grid tolerance:", "%le", 1, in, _DEFAULT_SET );
   save_pt = &(g.odd_even); g.odd_even = 1;
   read_parameter( &save_pt, "odd even preconditioning:", "%d", 1, in, _DEFAULT_SET );
 
-  save_pt = &(l->real_shift);
-  read_parameter( &save_pt, "m0:", "%lf", 1, in, _NO_DEFAULT_SET ); // ensuring downward compatibility
-  read_parameter( &save_pt, "solver m0:", "%lf", 1, in, _DEFAULT_SET );
-  save_pt = &(g.csw);
-  read_parameter( &save_pt, "csw:", "%lf", 1, in, _NO_DEFAULT_SET );
-  save_pt = &(g.setup_m0);
+  save_pt = &(g.setup_m0); g.setup_m0 = g.m0;
   read_parameter( &save_pt, "setup m0:", "%lf", 1, in, _DEFAULT_SET );
+#ifdef HAVE_TM
+  save_pt = &(g.mu_odd_shift); g.mu_odd_shift = 0;
+  read_parameter( &save_pt, "mu odd shift:", "%lf", 1, in, _DEFAULT_SET );
+  save_pt = &(g.mu_even_shift); g.mu_even_shift = 0;
+  read_parameter( &save_pt, "mu even shift:", "%lf", 1, in, _DEFAULT_SET );
+  save_pt = &(g.setup_mu); g.setup_mu = g.mu;
+  read_parameter( &save_pt, "setup mu:", "%lf", 1, in, _DEFAULT_SET );
+#endif
+
+#ifdef HAVE_TM1p1
+  save_pt = &(g.epsbar_ig5_odd_shift);g.epsbar_ig5_odd_shift=0;
+  read_parameter( &save_pt, "epsbar odd shift:", "%lf", 1, in, _DEFAULT_SET );
+  save_pt = &(g.epsbar_ig5_even_shift);g.epsbar_ig5_even_shift=0;
+  read_parameter( &save_pt, "epsbar even shift:", "%lf", 1, in, _DEFAULT_SET );
+#endif
   
   save_pt = &(g.method); g.method = 2;
   read_parameter( &save_pt, "method:", "%d", 1, in, _DEFAULT_SET );
-  save_pt = &(g.restart); g.restart = 10;
+  save_pt = &(g.restart); g.restart = 30;
   read_parameter( &save_pt, "iterations between restarts:", "%d", 1, in, _DEFAULT_SET );
-  save_pt = &(g.max_restart); g.max_restart = 100;
+  save_pt = &(g.max_restart); g.max_restart = 20;
   read_parameter( &save_pt, "maximum of restarts:", "%d", 1, in, _DEFAULT_SET );
   save_pt = &(g.tol); g.tol = 1E-10;
   read_parameter( &save_pt, "tolerance for relative residual:", "%le", 1, in, _DEFAULT_SET );
   save_pt = &(g.print); g.print = 0;
   read_parameter( &save_pt, "print mode:", "%d", 1, in, _DEFAULT_SET );
+#ifdef HAVE_TM
+  save_pt = &(g.downprop); g.downprop=1;
+  read_parameter( &save_pt, "addDownPropagator:", "%d", 1, in, _DEFAULT_SET );
+#endif
   
   if ( g.randomize ) {
     srand( time( 0 ) + 1000*g.my_rank );
   } else 
     srand( 1000*g.my_rank );
 }
-
-void set_solver_parameters( struct dd_alpha_amg_parameters *amg_params, level_struct *l ) {
-
-  g.mixed_precision = 1;
-  g.interpolation = 2;
-  g.randomize = 0;
-  g.coarse_iter    = amg_params->coarse_grid_iterations;
-  g.coarse_restart = amg_params->coarse_grid_maximum_number_of_restarts;
-  g.coarse_tol     = amg_params->coarse_grid_tolerance;
-  g.odd_even = 1;
-
-  l->real_shift    = amg_params->solver_mass;
-  g.setup_m0       = amg_params->setup_mass;
-  g.csw            = amg_params->c_sw;
-
-  g.method = 2;
-  l->n_cy = 1;
-  // outer solver in MG not used not used, -1 should disable allocations
-  g.restart = -1;
-  g.max_restart = 100;
-  g.tol = 1e-10;
-  g.print = 1;
-
-  // setting status to maximum to force initial setup
-  g.mg_setup_status.gauge_updates_since_last_setup = amg_params->discard_setup_after;
-  g.mg_setup_status.gauge_updates_since_last_setup_update = amg_params->update_setup_after;
-}
-
 
 void read_testvector_io_data_if_necessary( FILE *in ) {
 
@@ -953,19 +1080,11 @@ void read_kcycle_data( FILE *in ) {
   read_parameter( &save_pt, "kcycle tolerance:", "%le", 1, in, _DEFAULT_SET );
 }
 
-void set_kcycle_data() {
-
-  g.kcycle = 1;
-  g.kcycle_restart = 5;
-  g.kcycle_max_restart = 2;
-  g.kcycle_tol = 1e-1;
-}
-
 void validate_parameters( int ls, level_struct *l ) {
 
   int i;
   int mu;
-  
+
 #ifdef SSE
   if ( !g.odd_even )
     warning0("The SSE implementation is based on the odd-even preconditioned code.\
@@ -997,15 +1116,15 @@ void validate_parameters( int ls, level_struct *l ) {
       ASSERT( DIVIDES( g.global_lattice[i][mu]/g.global_lattice[i+1][mu], g.local_lattice[i][mu] ) ); 
       ASSERT( DIVIDES( g.block_lattice[i][mu], g.global_lattice[i][mu]/g.global_lattice[i+1][mu] ) );
 #ifdef SSE
-      if ( ! g.block_lattice[i][mu] == g.global_lattice[i][mu]/g.global_lattice[i+1][mu] )
+      if ( g.block_lattice[i][mu] != g.global_lattice[i][mu]/g.global_lattice[i+1][mu] )
         warning0("when using SSE, Schwarz block size and aggregate size have to match.\n");
       ASSERT( g.block_lattice[i][mu] == g.global_lattice[i][mu]/g.global_lattice[i+1][mu] );
+      // it works everywhere but we have some problem with the vector size.
+      // TODO: check all vectora allocated with size l->inner_vector_size
+      ASSERT( g.num_eig_vect[i] % SIMD_LENGTH_float == 0 );
 #endif
     }
     
-  for ( i=0; i<g.num_levels-2; i++ )
-    ASSERT( g.num_eig_vect[i] <= g.num_eig_vect[i+1] );
-  
   if ( g.odd_even ) {
     int coarse_sites_per_core = 1;
     for ( mu=0; mu<4; mu++ ) {
@@ -1039,9 +1158,24 @@ void validate_parameters( int ls, level_struct *l ) {
   ASSERT( IMPLIES( g.kcycle && g.method > 0, g.kcycle_max_restart > 0 ) );
   ASSERT( IMPLIES( g.kcycle && g.method > 0, 0 < g.kcycle_tol && g.kcycle_tol < 1 ) );
   
+
+  //LIST OF CASES WHICH SHOULD WORK, BUT DO NOT (TODO)
+
 #ifdef SSE
   ASSERT( g.mixed_precision );
-//   ASSERT( DIVIDES( 4, g.num_eig_vect[0] ) );
+#endif
+  
+  //TODO: Could work without, but you need to fix the setup phase.    
+  for ( i=0; i<g.num_levels-2; i++ )
+    ASSERT( g.num_eig_vect[i] <= g.num_eig_vect[i+1] );
+
+  //TODO: for some reason g.mixed_precision=0 do not work with g.num_levels>2
+  if ( g.num_levels>2 && g.interpolation )
+    ASSERT( g.mixed_precision );
+
+#ifdef HAVE_TM1p1
+  //TODO: method = 6 not supported with HAVE_TM1p1. To fix all the g5D functions
+  ASSERT( g.method !=6 );
 #endif
 }
 
@@ -1060,6 +1194,12 @@ void allocate_for_global_struct_after_read_global_info( int ls ) {
   MALLOC( g.post_smooth_iter, int, ls );
   MALLOC( g.ncycle, int, ls );
   MALLOC( g.relax_fac, double, ls );
+#ifdef HAVE_TM
+  MALLOC( g.mu_factor, double, ls );
+#endif
+#ifdef HAVE_TM1p1
+  MALLOC( g.epsbar_factor, double, ls );
+#endif
   MALLOC( g.block_iter, int, ls );
   MALLOC( g.setup_iter, int, ls );
   MALLOC( g.num_eig_vect, int, ls );
@@ -1085,7 +1225,8 @@ void set_level_and_global_structs_according_to_global_struct( level_struct *l ) 
   l->block_iter = g.block_iter[0];
   l->setup_iter = g.setup_iter[0];
   l->num_eig_vect = g.num_eig_vect[0];
-  
+  l->num_parent_eig_vect = 6; //for consistency sake
+    
   // compute some additional values
   l->num_lattice_site_var = 12;
   g.num_processes = 1;
@@ -1098,11 +1239,7 @@ void set_level_and_global_structs_according_to_global_struct( level_struct *l ) 
     g.num_processes *= l->global_splitting[mu];
   }
   
-  l->dirac_shift = l->real_shift;
-  l->even_shift = l->dirac_shift;
-  l->odd_shift = l->dirac_shift;
-  g.solve_m0 = l->dirac_shift;
-  g.setup_m0 = l->dirac_shift;
+  g.setup_m0 = g.m0;
 }
 
 void lg_in( char *inputfile, level_struct *l ) {
@@ -1111,11 +1248,12 @@ void lg_in( char *inputfile, level_struct *l ) {
 
   ASSERT( (in = fopen( inputfile, "r" )) != NULL );
 
-  set_default_global_info();
   read_global_info( in );
-
+  
   int ls = MAX(g.num_levels,2);
   allocate_for_global_struct_after_read_global_info( ls );
+
+  read_no_default_info( in, l );
 
   read_solver_parameters( in, l );
   read_geometry_data( in, ls );
@@ -1136,47 +1274,57 @@ void lg_in( char *inputfile, level_struct *l ) {
   fclose(in);
 }
 
-void update_parameters_in_global_struct( const struct dd_alpha_amg_parameters *amg_params ) {
-  // changes only parameters that can also be changed after initial setup
-  int ls = MAX(g.num_levels, 2);
-  for ( int i=0; i<ls; i++ ) {
-    g.post_smooth_iter[i] = amg_params->post_smooth_iterations[i];
-    g.block_iter[i]       = amg_params->post_smooth_block_iterations[i];
-    g.setup_iter[i]       = amg_params->setup_iterations[i];
+void parameter_update( level_struct *l ) {
+  
+  if(l->depth==0) {
+    int ls = MAX(g.num_levels,2);
+    set_level_and_global_structs_according_to_global_struct( l );
+    validate_parameters( ls, l );
   }
-  g.mass_for_next_solve = amg_params->solver_mass;
-}
-void update_parameters_in_level_structs( level_struct *l ) {
 
+  l->level = g.num_levels-1-l->depth;
   l->post_smooth_iter = g.post_smooth_iter[l->depth];
   l->block_iter = g.block_iter[l->depth];
   l->setup_iter = g.setup_iter[l->depth];
-
-  // for some reason coarser levels are initialized late, so we cannot always recurse here
-  if ( l->level > 0 && l->next_level != NULL )
-    update_parameters_in_level_structs( l->next_level );
+  l->num_eig_vect = g.num_eig_vect[l->depth];
+  if(l->depth>0)
+    l->num_parent_eig_vect = g.num_eig_vect[l->depth-1];
+  else
+    l->num_parent_eig_vect = 6;
+  
+  if ( l->level > 0 && l->next_level != NULL ) 
+    parameter_update( l->next_level );
 }
 
-void set_dd_alpha_amg_parameters( struct dd_alpha_amg_parameters *amg_params, level_struct *l ) {
 
-  g.amg_params = *amg_params;
-  set_default_global_info();
-  set_global_info( amg_params );
+void set_DDalphaAMG_parameters( struct init *params, level_struct *l ) {
+
+  FILE *in=NULL;
+
+  if (params->init_file != NULL) 
+    ASSERT( (in = fopen( params->init_file, "r" )) != NULL );
+  
+  g.num_levels = params->number_of_levels;
+  g.num_desired_levels = g.num_levels;
+
   int ls = MAX(g.num_levels,2);
   allocate_for_global_struct_after_read_global_info( ls );
 
-  set_geometry_data( amg_params );
-  update_parameters_in_global_struct( amg_params );
-  set_solver_parameters( amg_params, l );
-
+  set_global_info( params, l );
+  read_solver_parameters( in, l );
+  read_geometry_data( in, ls );
+  
+  ls = MAX(g.num_levels,2);
+  
   set_level_and_global_structs_according_to_global_struct( l );
 
-  set_kcycle_data();
-
+  read_testvector_io_data_if_necessary( in );
+  read_evaluation_parameters_if_necessary( in );
+  read_kcycle_data( in );
+  
   validate_parameters( ls, l );
-}
 
-void update_dd_alpha_amg_parameters( const struct dd_alpha_amg_parameters *amg_params, level_struct *l ) {
-  update_parameters_in_global_struct( amg_params );
-  update_parameters_in_level_structs( l );
+  if (params->init_file != NULL) 
+    fclose(in);
+
 }
