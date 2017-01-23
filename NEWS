@@ -3,3 +3,7 @@ Version v1606 - first release:
   This is the first release of the DDalphaAMG solver library.
   For an overview of its features included, please consult the
   user documentation in /doc.
+
+Version v1701 - multi file IO added
+  IO support for configurations stored in several files,
+  added by Issaku Kanamori.

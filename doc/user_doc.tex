@@ -47,6 +47,8 @@ In this section we take a closer look at the parameter files \texttt{sample.ini}
 \subsubsection{Configurations}
 First of all the path of your configuration has to be specified (again relative to main directory of absolute). The desired data layout is illustrated in the Appendix section. In the folder \texttt{conf/convert} one can find a converter which converts OPENQCD/DD-HMC configurations into the desired layout. The code is also able to read configurations in lime format, therefore use the parameter \texttt{format:} \texttt{1}, for compilation see Section~\ref{additionalcflags}. Note that you can store the paths of different configurations in the parameter file, the one which is used in the code is always the first parameter file that carries the prefix ``\texttt{configuration:}''. This property also holds for other parameters. In case you want to use two different configurations, one for the hopping term and one for the clover term, you have to enter the respective paths with the prefixes  ``\texttt{hopp cnfg:}'' and ``\texttt{clov cnfg:}'' in your input file. In this case, the prefix ``\texttt{configuration:}'' should not appear in your input file.
 
+A multi file IO support was added in version v1701. When using \texttt{format:} \texttt{2}, each process reads its own part of the configuration which was stored in a seperate file previously. A tool for splitting configurations (stored in DDalphaAMG format) can be found in \texttt{conf/split}. For debugging reasons we added another \texttt{CFLAG} as compile option, see Section~\ref{additionalcflags}.
+
 \subsubsection{Geometry}
 In the geometry part, the geometry of the lattice (in \texttt{depth0}) and the coarser lattices (in \texttt{depth1}, \texttt{depth2}, $\ldots$) as well as the parallelization have to be defined. Therefore we have to know the following details and respect the following restrictions:
 \begin{itemize}
@@ -101,6 +103,7 @@ There are additional \texttt{CFLAGS} in the makefile, mostly for debugging and I
   \item \texttt{-DTESTVECTOR\_ANALYSIS}: computes the eigenvalue-ishness of all test vectors during the setup phase.
   \item \texttt{-DSINGLE\_ALLREDUCE\_ARNOLDI}: modifies the Arnoldi iteration such that just on allreduce per iteration is needed. Therefore the norm of the next iterate is computed from inner product results. Please note that this can cause numerical instabilities in ill-conditioned cases. For further information, see~e.g.~\cite{RottmannPhD} and references therein.
   \item \texttt{-DHAVE\_LIME}: enables the code to read configurations in lime format. It requires an installed version of the c-lime library by USQCD and the enviroment variable \texttt{LIMEDIR} to be set with the installation directory. The functions in the header file \texttt{lime\_io.h} can be used to manage the io required for reading and saving the vectors.
+  \item \texttt{-DREAD\_CONF\_MULTI\_CHECKFILE} prints which rank opens which file when reading a multi file DDalphaAMG format configuration, this might be useful for investigating I/O problems.
 \end{itemize}
 
 \section{Appendix}

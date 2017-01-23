@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016, Matthias Rottmann, Artur Strebel, Simon Heybrock, Simone Bacchio, Bjoern Leder.
+ * Copyright (C) 2016, Matthias Rottmann, Artur Strebel, Simon Heybrock, Simone Bacchio, Bjoern Leder, Issaku Kanamori.
  * 
  * This file is part of the DDalphaAMG solver library.
  * 
@@ -17,6 +17,14 @@
  * You should have received a copy of the GNU General Public License
  * along with the DDalphaAMG solver library. If not, see http://www.gnu.org/licenses/.
  * 
+ */
+
+/*
+ * 2016 Aug. 25: Issaku Kanamori
+ *   modified read_conf(), to avoid reading from non-master nodes
+ *
+ * 2016 Oct. 3:  Issaku Kanamori
+ *   added read_conf_multi()
  */
 
 #include "main.h"
@@ -474,28 +482,31 @@ void read_conf( double *input_data, char *input_name, double *conf_plaq, level_s
     MALLOC( buffer[0].data, double, read_size );
     MALLOC( buffer[1].data, double, read_size );
     buffer_pt = &buffer[0];
-  }
   
-  ASSERT( (fin = fopen( input_name, "rb" )) != NULL );
+    ASSERT( (fin = fopen( input_name, "rb" )) != NULL );
   
-  // Read in lattice size in each dimension
-  ASSERT( fread( lsize, sizeof(int), 4, fin ) > 0 );
+    // Read in lattice size in each dimension
+    ASSERT( fread( lsize, sizeof(int), 4, fin ) > 0 );
 #ifdef BIG_ENDIAN_CNFG
     byteswap( (char *) &lsize[0] );  
     byteswap( (char *) &lsize[1] );
     byteswap( (char *) &lsize[2] );
     byteswap( (char *) &lsize[3] );
 #endif
-  for ( mu=0; mu<4; mu++ )
-    ASSERT( lsize[mu] == gl[mu] );
+    for ( mu=0; mu<4; mu++ )
+      ASSERT( lsize[mu] == gl[mu] );
   
   // Read in plaquette
-  ASSERT( fread( &plaq, sizeof(double), 1, fin ) > 0 );
+    ASSERT( fread( &plaq, sizeof(double), 1, fin ) > 0 );
 #ifdef BIG_ENDIAN_CNFG
     byteswap8( (char *) &plaq );
 #endif
-  printf0("\nDesired average plaquette: %.13lf in [0,3]\n", plaq );
-  *conf_plaq = plaq; 
+    printf0("\nDesired average plaquette: %.13lf in [0,3]\n", plaq );
+    printf0("\nDesired average plaquette: %.13lf in [0,1]\n", plaq/3.0 );
+    *conf_plaq = plaq; 
+  }
+  MPI_Bcast(conf_plaq, 1, MPI_DOUBLE, 0, g.comm_cart);
+
   input_data_pt = input_data;
   
   // Distribute data to according processes
@@ -540,13 +551,120 @@ void read_conf( double *input_data, char *input_name, double *conf_plaq, level_s
           k = (k+1)%10000;
         }
   
-  fclose( fin );
+  if( g.my_rank == 0)
+    fclose( fin );
   
   if ( g.my_rank == 0 ) {
     FREE( buffer[0].data, double, read_size );
     FREE( buffer[1].data, double, read_size );
   }
 
+}
+
+
+
+void read_conf_multi( double *input_data, char *input_name, double *conf_plaq, level_struct *l ) {
+  
+/*********************************************************************************
+* Reads in the configuration from multi files.
+* - double *input_data: Variable where conf data is stored.
+* - char *input_name: Name of the input file.
+* - double *conf_plaq: Holds the plaquette of given configuration.                                                
+*********************************************************************************/
+
+  int t, z, y, i, j,  mu, lsize[4],
+      *gl=l->global_lattice, *ll=l->local_lattice, read_size = 4*18*ll[X];
+  double *input_data_pt, plaq;
+  FILE* fin = NULL;
+
+  char postfix[100];
+  char full_input_name[1000];
+
+  /****************************************************************
+   * 2016 Oct. 3:  Issaku Kanamori
+   *   it seems MPI rank = g.my_coords[T] * Pz * Py * Px
+   *                     g.my_coords[Z] * Py * Px
+   *                   g.my_coords[Y] * Px
+   *                    g.my_coords[X]
+   *   for (Pt,Pz,Py,Px) processor lattice.
+   *  ( It might depend on the implementation of MPI.  At least,
+   *    I could not find any specification in the manural of MPI_Cart_* )
+   *
+   *  If you have a problem in opening the file due to misdistribution
+   *  of configuration files to computing nodes, try 
+   *  #define READ_CONF_MULTI_CHECKFILE
+   *  and find out which node is trying to read which file.
+   ******************************************************************/
+  printf0("reading from multi file configuration\n");
+  sprintf(postfix, ".pt%dpz%dpy%dpx%d", 
+          g.my_coords[T], g.my_coords[Z], g.my_coords[Y], g.my_coords[X]);
+  sprintf(full_input_name,"%s%s", input_name, postfix);
+#ifdef READ_CONF_MULTI_CHECKFILE
+  fin = fopen( full_input_name, "rb" );
+  int open_flag=0;
+  int open_flag_sum=0;
+  if(fin == NULL){
+    printf("ERROR!  node=%d,  filename=%s\n", g.my_rank, full_input_name);
+    fflush(0);
+    open_flag=1;
+  } else {
+    printf("opened: node=%d,  filename=%s\n", g.my_rank, full_input_name);
+    fflush(0);
+  }
+  MPI_Allreduce( &open_flag, &open_flag_sum, 1, MPI_INT, MPI_SUM, g.comm_cart );
+  ASSERT(open_flag_sum==0);
+#else
+  ASSERT( (fin = fopen( full_input_name, "rb" )) != NULL );
+#endif
+
+  // Read in lattice size in each dimension
+  ASSERT( fread( lsize, sizeof(int), 4, fin ) > 0 );
+#ifdef BIG_ENDIAN_CNFG
+  byteswap( (char *) &lsize[0] );  
+  byteswap( (char *) &lsize[1] );
+  byteswap( (char *) &lsize[2] );
+  byteswap( (char *) &lsize[3] );
+#endif
+
+  for ( mu=0; mu<4; mu++ )
+    ASSERT( lsize[mu] == gl[mu] );
+
+  // Read in plaquette
+  ASSERT( fread( &plaq, sizeof(double), 1, fin ) > 0 );
+#ifdef BIG_ENDIAN_CNFG
+  byteswap8( (char *) &plaq );
+#endif
+  printf0("\nDesired average plaquette: %.13lf in [0,3]\n", plaq );
+  printf0("\nDesired average plaquette: %.13lf in [0,1]\n", plaq/3.0 );
+  *conf_plaq = plaq; 
+
+  // check if value of the plaauette is the same 
+  MPI_Bcast(conf_plaq, 1, MPI_DOUBLE, 0, g.comm_cart);
+  ASSERT( plaq == *conf_plaq );
+
+  // read the configuration
+  input_data_pt = input_data;
+  for ( t=0; t<ll[T]; t++ )
+    for ( z=0; z<ll[Z]; z++ )
+      for ( y=0; y<ll[Y]; y++ ) {
+        // read ll[X] data at once  (see def. of read_size)
+        ASSERT( fread( input_data_pt, sizeof(double), read_size, fin ) > 0 );
+        #ifdef BIG_ENDIAN_CNFG
+        for ( i=0; i<read_size; i++ ) {
+          byteswap8( (char *) ( input_data_pt + i ) );
+        }
+        #endif
+        if ( (g.my_coords[T]+1 == gl[T]/ll[T]) && (t == ll[T]-1) ) {
+          if ( g.anti_pbc ) {
+            for ( j=0; j<read_size; j+=4*18 )
+              for ( i=0; i<18; i++ )
+                (input_data_pt+j+T*18)[i] = -(input_data_pt+j+T*18)[i];
+          }
+        }
+        input_data_pt += read_size;
+      }
+
+  fclose( fin );
 }
 
 

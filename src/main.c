@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016, Matthias Rottmann, Artur Strebel, Simon Heybrock, Simone Bacchio, Bjoern Leder.
+ * Copyright (C) 2016, Matthias Rottmann, Artur Strebel, Simon Heybrock, Simone Bacchio, Bjoern Leder, Issaku Kanamori.
  * 
  * This file is part of the DDalphaAMG solver library.
  * 
@@ -47,13 +47,13 @@ int main( int argc, char **argv ) {
   
   predefine_rank();
   if ( g.my_rank == 0 ) {
-    printf("\n\n+----------------------------------------------------------+\n");
-    printf("| The DDalphaAMG solver library.                           |\n");
-    printf("| Copyright (C) 2016, Matthias Rottmann, Artur Strebel,    |\n");
-    printf("|       Simon Heybrock, Simone Bacchio, Bjoern Leder.      |\n");
-    printf("|                                                          |\n");
-    printf("| This program comes with ABSOLUTELY NO WARRANTY.          |\n");
-    printf("+----------------------------------------------------------+\n\n");
+    printf("\n\n+----------------------------------------------------------------------+\n");
+    printf("| The DDalphaAMG solver library.                                       |\n");
+    printf("| Copyright (C) 2016, Matthias Rottmann, Artur Strebel,                |\n");
+    printf("|       Simon Heybrock, Simone Bacchio, Bjoern Leder, Issaku Kanamori. |\n");
+    printf("|                                                                      |\n");
+    printf("| This program comes with ABSOLUTELY NO WARRANTY.                      |\n");
+    printf("+----------------------------------------------------------------------+\n\n");
   }
   
   method_init( &argc, &argv, &l );
@@ -68,6 +68,8 @@ int main( int argc, char **argv ) {
 
     if(g.in_format == _LIME)
       lime_read_conf( (double*)(clov), g.in_clov, &(g.plaq_clov) );
+    else if(g.in_format == _MULTI)
+      read_conf_multi( (double*)(clov), g.in, &(g.plaq_hopp), &l );
     else
       read_conf( (double*)(clov), g.in_clov, &(g.plaq_clov), &l );
 
@@ -76,7 +78,9 @@ int main( int argc, char **argv ) {
 
   if(g.in_format == _LIME)
     lime_read_conf( (double*)(hopp), g.in, &(g.plaq_hopp) );
-  else 
+  else if(g.in_format == _MULTI)
+    read_conf_multi( (double*)(hopp), g.in, &(g.plaq_hopp), &l );
+  else
     read_conf( (double*)(hopp), g.in, &(g.plaq_hopp), &l );
 
   if ( !g.two_cnfgs ) {

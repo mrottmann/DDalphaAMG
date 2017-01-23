@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016, Matthias Rottmann, Artur Strebel, Simon Heybrock, Simone Bacchio, Bjoern Leder.
+ * Copyright (C) 2016, Matthias Rottmann, Artur Strebel, Simon Heybrock, Simone Bacchio, Bjoern Leder, Issaku Kanamori.
  * 
  * This file is part of the DDalphaAMG solver library.
  * 
@@ -35,9 +35,11 @@
 
   extern Hdf5_fileinfo h5info;
 #endif
+  
   void byteswap( char *in );  
   void byteswap8( char *in );  
   void read_conf( double *input_data, char *input_name, double *conf_plaq, level_struct *l );
+  void read_conf_multi( double *input_data, char *input_name, double *conf_plaq, level_struct *l );
   void vector_io( double *phi, char *filename, const int mode, level_struct *l );
   void vector_io_single_file( double *psi, double *lambda, char *filename, const int mode, int n, char *vector_type, level_struct *l );
   void d_dump( config_double D, level_struct *l );

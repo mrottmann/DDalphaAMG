@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016, Matthias Rottmann, Artur Strebel, Simon Heybrock, Simone Bacchio, Bjoern Leder.
+ * Copyright (C) 2016, Matthias Rottmann, Artur Strebel, Simon Heybrock, Simone Bacchio, Bjoern Leder, Issaku Kanamori.
  * 
  * This file is part of the DDalphaAMG solver library.
  * 
@@ -657,6 +657,7 @@ void shift_update( complex_double shift, level_struct *l, struct Thread *threadi
     operator_updates_double( l );
 
   g.g5D_shift = shift;
+  l->dirac_shift = shift;
   END_LOCKED_MASTER(threading)
 
 #ifdef DEBUG

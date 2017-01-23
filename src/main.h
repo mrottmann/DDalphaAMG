@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016, Matthias Rottmann, Artur Strebel, Simon Heybrock, Simone Bacchio, Bjoern Leder.
+ * Copyright (C) 2016, Matthias Rottmann, Artur Strebel, Simon Heybrock, Simone Bacchio, Bjoern Leder, Issaku Kanamori.
  * 
  * This file is part of the DDalphaAMG solver library.
  * 
@@ -126,7 +126,7 @@
   g.cur_storage += (sizeof(kind) * (length))/(1024.0*1024.0); \
   if ( g.cur_storage > g.max_storage ) g.max_storage = g.cur_storage; }while(0)
   
-  #define FREE_HUGEPAGES( addr, kind, length ) do { free( addr ); \
+  #define FREE_HUGEPAGES( addr, kind, length ) do { free( addr ); addr = NULL; \
   g.cur_storage -= (sizeof(kind) * (length))/(1024.0*1024.0); }while(0)
   
   #ifdef DEBUG
@@ -192,7 +192,7 @@
   enum { _ADD, _COPY };
   enum { _ORDINARY, _SCHWARZ };
   enum { _RES, _NO_RES };
-  enum { _STANDARD, _LIME }; //formats
+  enum { _STANDARD, _LIME, _MULTI}; //formats
   enum { _READ, _WRITE };
   enum { _NO_SHIFT };
   enum { _BTWN_ORTH = 20 };

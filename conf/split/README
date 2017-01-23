@@ -1,0 +1,18 @@
+split_conf
+
+2016 Nov. 7  Issaku Kanamori (kanamori@hiroshima-u.ac.jp)
+
+split a single configuration file for DDalphaAMG into small files for each node.
+
+Usage: ./divide_conf Lt Lz Ly Lx Pt Pz Py Px inputfile outputfile
+  L? : global lattice size in each direction
+  P? : number of processors in each direction
+   total number of processors is Pt x Pz x Py x Px
+
+this makes 
+ inputfile
+-->
+  outputfile.pt0pz0py0px0
+  outputfile.pt0pz0py0px1
+  ....
+ [in total Pt x Pz x Py x Px files]
