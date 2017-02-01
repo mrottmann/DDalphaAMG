@@ -70,7 +70,9 @@
   
   double dd_alpha_amg_wilson_solve( double *vector_out, double *vector_in, double tol, double scale_even, double scale_odd, int *status );
   /* does not use vector_index_fct, assumes that caller
-   * provides vector_out and vector_in in proper data layout */
+   * provides vector_out and vector_in in proper data layout
+   * CAUTION: this interface is not designed for vector_in = 0
+   *          users are supposed to take care of such cases themselves */
   void dd_alpha_amg_preconditioner( double *vector_out, double *vector_in, double scale_even, double scale_odd, int *status );
   /* threads spawned by user, each thread can call this function,
    * for now we assume that barrier among cores can simply use omp barrier,
