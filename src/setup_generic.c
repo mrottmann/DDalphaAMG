@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016, Matthias Rottmann, Artur Strebel, Simon Heybrock, Simone Bacchio, Bjoern Leder, Issaku Kanamori.
+ * Copyright (C) 2017, Matthias Rottmann, Artur Strebel, Simon Heybrock, Simone Bacchio, Bjoern Leder, Issaku Kanamori.
  * 
  * This file is part of the DDalphaAMG solver library.
  * 
@@ -198,7 +198,7 @@ void interpolation_PRECISION_define( vector_double *V, level_struct *l, struct T
     
   if ( V == NULL ) {
     
-    PUBLIC_MALLOC( buffer, complex_PRECISION*, 3 );
+    MALLOC( buffer, complex_PRECISION*, 3 );
     buffer[0] = NULL;
     PUBLIC_MALLOC( buffer[0], complex_PRECISION, l->vector_size*3 );
     
@@ -234,7 +234,7 @@ void interpolation_PRECISION_define( vector_double *V, level_struct *l, struct T
     }
     
     PUBLIC_FREE( buffer[0], complex_PRECISION, l->vector_size*3 );
-    PUBLIC_FREE( buffer, complex_PRECISION*, 3 );
+    FREE( buffer, complex_PRECISION*, 3 );
     
     for ( k=0; k<n; k++ ) {
       vector_PRECISION_real_scale( l->is_PRECISION.test_vector[k], l->is_PRECISION.test_vector[k],
