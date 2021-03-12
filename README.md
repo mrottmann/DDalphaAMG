@@ -1,7 +1,7 @@
 
 The DDalphaAMG solver library is an inverter for Wilson-Clover fermions from lattice QCD.
 
-INSTALL:
+## INSTALL:
 
   The main directory contains a makefile example. The standard makefile
   should work with a few adjustments (compiler and MPI library) on the 
@@ -14,13 +14,13 @@ INSTALL:
   the user documentation. the library interface can be found in the
   "include" folder.
 
-HOWTO:
+ää HOWTO:
 
   After having compiled the user documentation via
   "make documentation" please consult the compiled PDF in /doc for
   further information.
 
-NOTE:
+## NOTE:
  
  This repository has been forked multiple times for different purposes and uses. In particular, find:
  -- GPU improvements (Wilson) here : https://github.com/Gustavroot/DDalphaAMG
