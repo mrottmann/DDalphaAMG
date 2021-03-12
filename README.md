@@ -6,8 +6,10 @@ The DDalphaAMG solver library is an inverter for Wilson-Clover fermions from lat
   The main directory contains a makefile example. The standard makefile
   should work with a few adjustments (compiler and MPI library) on the 
   machine of your choice. Once the necessary   adjustments of the
-  makefile are done, the command 
+  makefile are done, the command
+  
     "make -f yourmakefile -j numberofthreads wilson"
+    
   should compile the whole entire Wilson solver code, such that it is
   ready to be run. The makefile contains additional rules "library" and
   "documentation" for compiling the code as a library and for compiling
