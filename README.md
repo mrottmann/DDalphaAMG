@@ -14,7 +14,7 @@ The DDalphaAMG solver library is an inverter for Wilson-Clover fermions from lat
   the user documentation. the library interface can be found in the
   "include" folder.
 
-ää HOWTO:
+## HOWTO:
 
   After having compiled the user documentation via
   "make documentation" please consult the compiled PDF in /doc for
@@ -23,5 +23,7 @@ The DDalphaAMG solver library is an inverter for Wilson-Clover fermions from lat
 ## NOTE:
  
  This repository has been forked multiple times for different purposes and uses. In particular, find:
+ 
  -- GPU improvements (Wilson) here : https://github.com/Gustavroot/DDalphaAMG
+ 
  -- coarsest-level improvements (Twisted Mass) here : https://github.com/JesusEV/DDalphaAMG_ci
