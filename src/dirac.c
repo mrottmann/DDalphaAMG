@@ -131,6 +131,31 @@ void dirac_setup( config_double hopp, config_double clover, level_struct *l ) {
     apply_anti_pbc( U, l );
 #endif
   
+  // employ open boundary conditions after calculating clover term
+  int local_spacial_dimension = l->local_lattice[Z]*l->local_lattice[Y]*l->local_lattice[X];
+  if (g.bc == 3) {
+    i=0;
+    if(g.my_coords[0]==0) {
+      for (int s = 0; s < local_spacial_dimension; s++ )
+        for ( mu=0; mu<4; mu++ )
+          for (j=0; j<9; j++, i++) {
+            hopp[i] = 0;
+          }
+    }
+    i=0;
+    if(g.my_coords[0]==(l->global_lattice[T]/l->local_lattice[T]-1)) {
+      for ( int s = 0; s < local_spacial_dimension; s++ )
+        for ( mu=0; mu<4; mu++ )
+          for (j=0; j<9; j++, i++) {
+            hopp[4*9*(l->num_inner_lattice_sites - local_spacial_dimension) + i] = 0;
+            if (mu == 0) hopp[4*9*(l->num_inner_lattice_sites - 2*local_spacial_dimension) + i] = 0;
+          }
+    }
+
+    // Update the operator
+    vector_double_scale( g.op_double.D, hopp, 0.5, 0, 4*9*l->num_inner_lattice_sites, l );
+  }
+  
   SU3_storage_free( &U, l );
   
   t1 = MPI_Wtime();
