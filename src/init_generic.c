@@ -1,22 +1,22 @@
 /*
- * Copyright (C) 2016, Matthias Rottmann, Artur Strebel, Simon Heybrock, Simone Bacchio, Bjoern Leder, Issaku Kanamori.
- * 
+ * Copyright (C) 2016, Matthias Rottmann, Artur Strebel, Simon Heybrock, Simone Bacchio, Bjoern Leder.
+ *
  * This file is part of the DDalphaAMG solver library.
- * 
+ *
  * The DDalphaAMG solver library is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
- * 
+ *
  * The DDalphaAMG solver library is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- * 
- * 
+ *
+ *
  * You should have received a copy of the GNU General Public License
  * along with the DDalphaAMG solver library. If not, see http://www.gnu.org/licenses/.
- * 
+ *
  */
 
 #include "main.h"
@@ -26,18 +26,18 @@ void prof_PRECISION_init( level_struct *l ) {
 /*********************************************************************************
 * Initializes the profiling struct by specifying the name of every entry.
 *********************************************************************************/
-  
+
   if ( l != NULL ) {
     for ( int i=0; i<_NUM_PROF; i++ ) {
       l->prof_PRECISION.time[i] = 0.0;
       l->prof_PRECISION.count[i] = 0.0;
       l->prof_PRECISION.flop[i] = 0.0;
     }
-    
+
     double level_ratio = 1;
     for ( int mu=0; mu<4; mu++ )
       level_ratio *= (double)g.global_lattice[l->depth][mu]/(double)g.global_lattice[0][mu];
-    
+
     sprintf( l->prof_PRECISION.name[_GIP], "global inner product, PRECISION" );
     l->prof_PRECISION.flop[_GIP] = level_ratio*l->num_lattice_site_var*8.0;
     sprintf( l->prof_PRECISION.name[_PIP], "process inner product, PRECISION" );
@@ -74,7 +74,7 @@ void prof_PRECISION_init( level_struct *l ) {
     sprintf( l->prof_PRECISION.name[_SM2], "smoother - pt 2, solve no comm, PRECISION" );
     sprintf( l->prof_PRECISION.name[_SM3], "smoother - pt 3, res comm, PRECISION" );
     sprintf( l->prof_PRECISION.name[_SM4], "smoother - pt 4, solve comm, PRECISION" );
-    
+
     sprintf( l->prof_PRECISION.name[_SMALL1], "Hessenberg: qr update PRECISION" );
     sprintf( l->prof_PRECISION.name[_SMALL2], "Hessenberg: bkwd subst PRECISION" );
   }
@@ -96,87 +96,162 @@ double prof_PRECISION_print( level_struct *l ) {
 
 
 void fine_level_PRECISION_alloc( level_struct *l ) {
-  
+
   int n = 8;
-  
-  MALLOC( l->vbuf_PRECISION[0], complex_PRECISION, n*l->vector_size );  
+#ifdef HAVE_TM1p1
+  MALLOC( l->vbuf_PRECISION[0], complex_PRECISION, 2*n*l->vector_size );
+  for ( int i=1; i<n; i++ )
+    l->vbuf_PRECISION[i] = l->vbuf_PRECISION[0] + 2*i*l->vector_size;
+  MALLOC( l->p_PRECISION.b, complex_PRECISION, 2*2*l->inner_vector_size );
+  l->p_PRECISION.x = l->p_PRECISION.b + 2*l->inner_vector_size;
+#else
+  MALLOC( l->vbuf_PRECISION[0], complex_PRECISION, n*l->vector_size );
   for ( int i=1; i<n; i++ )
     l->vbuf_PRECISION[i] = l->vbuf_PRECISION[0] + i*l->vector_size;
   MALLOC( l->p_PRECISION.b, complex_PRECISION, 2*l->inner_vector_size );
   l->p_PRECISION.x = l->p_PRECISION.b + l->inner_vector_size;
+#endif
 }
 
 
 void fine_level_PRECISION_free( level_struct *l ) {
-  
+
   int n = 8;
-  
-  FREE( l->vbuf_PRECISION[0], complex_PRECISION, n*l->vector_size );  
+
+#ifdef HAVE_TM1p1
+  FREE( l->vbuf_PRECISION[0], complex_PRECISION, 2*n*l->vector_size );
+  for ( int i=1; i<n; i++ )
+    l->vbuf_PRECISION[i] = NULL;
+  FREE( l->p_PRECISION.b, complex_PRECISION, 2*2*l->inner_vector_size );
+  l->p_PRECISION.x = NULL;
+#else
+  FREE( l->vbuf_PRECISION[0], complex_PRECISION, n*l->vector_size );
   for ( int i=1; i<n; i++ )
     l->vbuf_PRECISION[i] = NULL;
   FREE( l->p_PRECISION.b, complex_PRECISION, 2*l->inner_vector_size );
   l->p_PRECISION.x = NULL;
+#endif
 }
 
 
 void next_level_PRECISION_setup( level_struct *l ) {
-    
+
   prof_float_init( l->next_level );
   prof_double_init( l->next_level );
-  gathering_PRECISION_next_level_init( &(l->next_level->gs_PRECISION), l );  
+  gathering_PRECISION_next_level_init( &(l->next_level->gs_PRECISION), l );
   gathering_PRECISION_setup( &(l->next_level->gs_PRECISION), l->next_level );
-  
+
   if ( !l->idle ) {
     coarsening_index_table_PRECISION_alloc( &(l->is_PRECISION), l );
     coarsening_index_table_PRECISION_define( &(l->is_PRECISION), &(l->s_PRECISION), l );
 
     if ( l->level == 1 && !l->next_level->idle ) {
-      fgmres_PRECISION_struct_alloc( g.coarse_iter, g.coarse_restart, l->next_level->vector_size, g.coarse_tol, 
+      // coarsest-level solver
+#if defined(GCRODR) && defined(POLYPREC)
+      flgcrodr_PRECISION_struct_alloc( g.coarse_iter, g.coarse_restart, l->next_level->vector_size, g.coarse_tol,
+                                       _COARSE_GMRES, _RIGHT, apply_polyprec_PRECISION,
+                                       g.method==6?(g.odd_even?g5D_coarse_apply_schur_complement_PRECISION:g5D_apply_coarse_operator_PRECISION)
+                                       :(g.odd_even?coarse_apply_schur_complement_PRECISION:apply_coarse_operator_PRECISION),
+                                       &(l->next_level->p_PRECISION), l->next_level );
+#elif POLYPREC
+      fgmres_PRECISION_struct_alloc( g.coarse_iter, g.coarse_restart, l->next_level->vector_size, g.coarse_tol,
+                                     _COARSE_GMRES, _RIGHT, apply_polyprec_PRECISION,
+                                     g.method==6?(g.odd_even?g5D_coarse_apply_schur_complement_PRECISION:g5D_apply_coarse_operator_PRECISION)
+                                     :(g.odd_even?coarse_apply_schur_complement_PRECISION:apply_coarse_operator_PRECISION),
+                                     &(l->next_level->p_PRECISION), l->next_level );
+
+#elif GCRODR
+      flgcrodr_PRECISION_struct_alloc( g.coarse_iter, g.coarse_restart, l->next_level->vector_size, g.coarse_tol,
+                                       _COARSE_GMRES, _NOTHING, NULL,
+                                       g.method==6?(g.odd_even?g5D_coarse_apply_schur_complement_PRECISION:g5D_apply_coarse_operator_PRECISION)
+                                       :(g.odd_even?coarse_apply_schur_complement_PRECISION:apply_coarse_operator_PRECISION),
+                                       &(l->next_level->p_PRECISION), l->next_level );
+
+      // fgmres_PRECISION_struct_alloc( g.coarse_iter, g.coarse_restart, l->next_level->vector_size, g.coarse_tol,
+      //                                _COARSE_GMRES, _NOTHING, NULL,
+      //                                g.method==6?(g.odd_even?g5D_coarse_apply_schur_complement_PRECISION:g5D_apply_coarse_operator_PRECISION)
+      //                                :(g.odd_even?coarse_apply_schur_complement_PRECISION:apply_coarse_operator_PRECISION),
+      //                                &(l->next_level->p_PRECISION), l->next_level );
+#else
+      fgmres_PRECISION_struct_alloc( g.coarse_iter, g.coarse_restart, l->next_level->vector_size, g.coarse_tol,
                                      _COARSE_GMRES, _NOTHING, NULL,
                                      g.method==6?(g.odd_even?g5D_coarse_apply_schur_complement_PRECISION:g5D_apply_coarse_operator_PRECISION)
                                      :(g.odd_even?coarse_apply_schur_complement_PRECISION:apply_coarse_operator_PRECISION),
                                      &(l->next_level->p_PRECISION), l->next_level );
+#endif
     } else {
-      if ( g.kcycle ) {
-        fgmres_PRECISION_struct_alloc( g.kcycle_restart, g.kcycle_max_restart, l->next_level->vector_size, g.kcycle_tol, 
+//       if ( g.kcycle ) {
+        fgmres_PRECISION_struct_alloc( g.kcycle_restart, g.kcycle_max_restart, l->next_level->vector_size, g.kcycle_tol,
                                        _K_CYCLE, _RIGHT, vcycle_PRECISION,
                                        g.method==6?g5D_apply_coarse_operator_PRECISION:apply_coarse_operator_PRECISION,
                                        &(l->next_level->p_PRECISION), l->next_level );
-      } else {
-        MALLOC( l->next_level->p_PRECISION.b, complex_PRECISION, 2*l->next_level->vector_size );
-        l->next_level->p_PRECISION.x = l->next_level->p_PRECISION.b + l->next_level->vector_size;
-        l->next_level->p_PRECISION.shift = 0;
-        l->next_level->p_PRECISION.v_start = 0;
-        l->next_level->p_PRECISION.v_end = l->inner_vector_size;
-      }
+//       } else {
+// #ifdef HAVE_TM1p1
+//         MALLOC( l->next_level->p_PRECISION.b, complex_PRECISION, 2*2*l->next_level->vector_size );
+//         l->next_level->p_PRECISION.x = l->next_level->p_PRECISION.b + 2*l->next_level->vector_size;
+// #else
+//         MALLOC( l->next_level->p_PRECISION.b, complex_PRECISION, 2*l->next_level->vector_size );
+//         l->next_level->p_PRECISION.x = l->next_level->p_PRECISION.b + l->next_level->vector_size;
+// #endif
+//         l->next_level->p_PRECISION.v_start = 0;
+//         l->next_level->p_PRECISION.v_end = l->next_level->inner_vector_size;
+// #ifdef BLOCK_JACOBI
+//         if ( l->next_level->level==0 ) {
+//           l->next_level->p_PRECISION.block_jacobi_PRECISION.local_p.v_start = 0;
+//           l->next_level->p_PRECISION.block_jacobi_PRECISION.local_p.v_end = l->next_level->inner_vector_size;
+//         }
+// #endif
+//       }
     }
 
     int i, n = (l->next_level->level>0)?6:4;
+#ifdef HAVE_TM1p1
+    MALLOC( l->next_level->vbuf_PRECISION[0], complex_PRECISION, 2*n*l->next_level->vector_size );
+    for ( i=1; i<n; i++ )
+      l->next_level->vbuf_PRECISION[i] = l->next_level->vbuf_PRECISION[0] + 2*i*l->next_level->vector_size;
+#else
     MALLOC( l->next_level->vbuf_PRECISION[0], complex_PRECISION, n*l->next_level->vector_size );
     for ( i=1; i<n; i++ )
       l->next_level->vbuf_PRECISION[i] = l->next_level->vbuf_PRECISION[0] + i*l->next_level->vector_size;
+#endif
   }
 }
 
 
 void next_level_PRECISION_free( level_struct *l ) {
-  
+
   coarse_grid_correction_PRECISION_free( l );
-  
+
   if ( !l->idle ) {
-    if ( ( l->level == 1 && !l->next_level->idle ) || g.kcycle ) {
+//     if ( ( l->level == 1 && !l->next_level->idle ) || g.kcycle ) {
+#ifdef GCRODR
+      if ( l->level == 1 && !l->next_level->idle ) {
+        flgcrodr_PRECISION_struct_free( &(l->next_level->p_PRECISION), l->next_level );
+      } else {
+        fgmres_PRECISION_struct_free( &(l->next_level->p_PRECISION), l->next_level );
+      }
+#else
       fgmres_PRECISION_struct_free( &(l->next_level->p_PRECISION), l->next_level );
-    } else {
-      FREE( l->next_level->p_PRECISION.b, complex_PRECISION, 2*l->next_level->vector_size );
-    }
-  
-    int i, n = (l->next_level->level>0)?6:4;  
+#endif
+//     } else {
+// #ifdef HAVE_TM1p1
+//       FREE( l->next_level->p_PRECISION.b, complex_PRECISION, 2*2*l->next_level->vector_size );
+// #else
+//       FREE( l->next_level->p_PRECISION.b, complex_PRECISION, 2*l->next_level->vector_size );
+// #endif
+//     }
+
+    int i, n = (l->next_level->level>0)?6:4;
     for ( i=1; i<n; i++)
       l->next_level->vbuf_PRECISION[i] = NULL;
+#ifdef HAVE_TM1p1
+    FREE( l->next_level->vbuf_PRECISION[0], complex_PRECISION, 2*n*l->next_level->vector_size );
+#else
     FREE( l->next_level->vbuf_PRECISION[0], complex_PRECISION, n*l->next_level->vector_size );
+#endif
     coarsening_index_table_PRECISION_free( &(l->is_PRECISION), l );
   }
-  
+
   gathering_PRECISION_free( &(l->next_level->gs_PRECISION), l->next_level );
 }
 
@@ -185,18 +260,28 @@ void level_PRECISION_init( level_struct *l ) {
 
   for ( int i=0; i<9; i++ )
     l->vbuf_PRECISION[i] = NULL;
-  
+
   operator_PRECISION_init( &(l->op_PRECISION) );
   operator_PRECISION_init( &(l->oe_op_PRECISION) );
   schwarz_PRECISION_init( &(l->s_PRECISION), l );
   interpolation_PRECISION_struct_init( &(l->is_PRECISION) );
+#ifdef GCRODR
+  if ( l->level==0 ) {
+    flgcrodr_PRECISION_struct_init( &(l->p_PRECISION) );
+    flgcrodr_PRECISION_struct_init( &(l->sp_PRECISION) );
+  } else {
+    fgmres_PRECISION_struct_init( &(l->p_PRECISION) );
+    fgmres_PRECISION_struct_init( &(l->sp_PRECISION) );
+  }
+#else
   fgmres_PRECISION_struct_init( &(l->p_PRECISION) );
   fgmres_PRECISION_struct_init( &(l->sp_PRECISION) );
+#endif
 }
 
 
 void vcycle_timing_PRECISION( int n, level_struct *l, struct Thread *threading ) {
-  
+
   ASSERT( g.mixed_precision );
   vector_PRECISION v1 = NULL, v2 = NULL;
   double t0=0, t1=0;
@@ -206,7 +291,7 @@ void vcycle_timing_PRECISION( int n, level_struct *l, struct Thread *threading )
   START_LOCKED_MASTER(threading)
   vector_PRECISION_define_random( v2, 0, l->inner_vector_size, l );
   END_LOCKED_MASTER(threading)
-  
+
   START_MASTER(threading)
   t0 = MPI_Wtime();
   END_MASTER(threading)
