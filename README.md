@@ -5,7 +5,7 @@ The DDalphaAMG solver library is an inverter for Wilson-Clover fermions from lat
 
   The main directory contains a makefile example. The standard makefile
   should work with a few adjustments (compiler and MPI library) on the 
-  machine of your choice. Once the necessary   adjustments of the
+  machine of your choice. Once the necessary adjustments of the
   makefile are done, the command
   
     "make -f yourmakefile -j numberofthreads wilson"
@@ -26,6 +26,9 @@ The DDalphaAMG solver library is an inverter for Wilson-Clover fermions from lat
  
  This repository has been forked multiple times for different purposes and uses. In particular, find:
  
- -- GPU improvements (Wilson) here : https://github.com/Gustavroot/DDalphaAMG
+ - GPU improvements (Wilson) by Gustavo Ramirez here: https://github.com/Gustavroot/DDalphaAMG
  
- -- coarsest-level improvements (Twisted Mass) here : https://github.com/JesusEV/DDalphaAMG_ci
+ - coarsest-level improvements (Twisted Mass) by Jesus Espinoza-Valverd here: https://github.com/JesusEV/DDalphaAMG_ci
+
+ - multi-RHS AVX2/AVX-512 vectorized rewrite (Wilson) by Anthony Grebe here: https://github.com/agrebe/qc
+
